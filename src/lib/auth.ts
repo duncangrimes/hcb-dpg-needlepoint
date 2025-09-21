@@ -14,4 +14,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       from: process.env.LOGIN_EMAIL_FROM,
     }),
   ],
+  callbacks: {
+    session({ session, user }) {
+      session.user.id = user.id;
+      return session;
+    },
+  },
 });
