@@ -73,15 +73,18 @@ model Canvas {
   id                 String @id @default(cuid())
   project            Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   projectId          String
-  
+
   // Canvas configuration
   meshCount          Int
   width              Float
+  numColors          Int
 
   // The original uploaded image before conversion
   originalImage      String
+  // The reduced image for the preview
+  reducedImage       String?
   // The display version that looks like a stitched canvas for users
-  displayImage       String
+  displayImage       String?
   // The manufacturer-ready output
-  manufacturerImage  String
+  manufacturerImage  String?
 }

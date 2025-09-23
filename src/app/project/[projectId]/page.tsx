@@ -1,8 +1,9 @@
 import { prisma } from "@/lib/prisma";
-import { ProjectImageUploader } from "./uploader";
+import { ProjectImageUploader } from "../../../components/project/uploader-client";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { unstable_noStore as noStore } from "next/cache";
+import { CanvasDisplay } from "./CanvasDisplay";
 
 export default async function ProjectPage({ params }: { params: Promise<{ projectId: string }> }) {
   noStore();
@@ -42,9 +43,16 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
         ) : (
           <div className="mt-6 flex flex-col gap-4">
             {project.canvases.map((canvas) => (
-              <div key={canvas.id} className="w-full rounded-lg outline -outline-offset-1 outline-gray-200 dark:outline-white/10 overflow-hidden bg-white dark:bg-gray-800">
-                <img alt={project.title} src={canvas.originalImage} className="w-full h-auto max-h-[28rem] object-contain bg-gray-50 dark:bg-gray-900" />
-              </div>
+              <CanvasDisplay
+                key={canvas.id}
+                title={project.title}
+                originalImage={canvas.originalImage}
+                reducedImage={(canvas as any).reducedImage}
+                manufacturerImage={(canvas as any).manufacturerImage}
+                meshCount={(canvas as any).meshCount}
+                width={(canvas as any).width}
+                numColors={(canvas as any).numColors}
+              />
             ))}
           </div>
         )}
