@@ -6,7 +6,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import sharp from "sharp";
-import { buildManufacturerImage, getRepresentativeColors, getRepresentativeColorsMedianCut, getThreadPalette, mapColorsToThreads, buildSegmentedManufacturerImage, buildDitheredManufacturerImage } from "@/lib/colors";
+import { getRepresentativeColors, getRepresentativeColorsMedianCut, getThreadPalette, mapColorsToThreads, buildSegmentedManufacturerImage, buildDitheredManufacturerImage, applyEnhancedAntiAliasing } from "@/lib/colors";
 
 export async function POST(request: Request): Promise<NextResponse> {
   const body = (await request.json()) as HandleUploadBody;
@@ -138,13 +138,8 @@ export async function POST(request: Request): Promise<NextResponse> {
           console.log(`🎨 Building dithered manufacturer image: ${reducedW}×${reducedH} pixels`);
           let manufacturerPngBuffer = await buildDitheredManufacturerImage(reducedPngBuffer, mapped);
           
-          // Apply post-processing to smooth out pixelation while preserving needlepoint aesthetic
-          manufacturerPngBuffer = await sharp(manufacturerPngBuffer)
-            .modulate({ saturation: 1.05, brightness: 1.01 }) // subtle final enhancement
-            .blur(0.4) // gentle blur to smooth harsh pixel edges
-            .sharpen(0.2) // slight sharpening to maintain detail definition
-            .png()
-            .toBuffer();
+          // Enhanced anti-aliasing post-processing for smoother transitions
+          manufacturerPngBuffer = await applyEnhancedAntiAliasing(manufacturerPngBuffer);
           const manufacturerBlobName = `manufacturer/${projectId}-${Date.now()}.png`;
           const manufacturerBlob = await put(manufacturerBlobName, manufacturerPngBuffer, {
             access: "public",

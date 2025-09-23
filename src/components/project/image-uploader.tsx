@@ -46,12 +46,18 @@ export function ImageUploader({ projectId, onUploaded }: ImageUploaderProps) {
         const file = selectedFile;
         try {
           setIsUploading(true);
+          setError(null);
           const blob = await upload(file.name, file, {
             access: "public",
             handleUploadUrl: "/api/images/upload",
             clientPayload: JSON.stringify({ projectId, meshCount, width: parsedWidth, numColors: parsedNumColors }),
           });
+          
+          // Wait a moment for the server processing to complete
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
           onUploaded?.(blob);
+          
           // reset input so the same file can be selected again
           if (inputFileRef.current) inputFileRef.current.value = "";
           if (previewUrl) {
@@ -59,8 +65,6 @@ export function ImageUploader({ projectId, onUploaded }: ImageUploaderProps) {
             setPreviewUrl(null);
           }
           setSelectedFile(null);
-          // refresh server components so new image appears
-          router.refresh();
         } catch (e) {
           setError((e as Error).message);
         } finally {
@@ -72,7 +76,7 @@ export function ImageUploader({ projectId, onUploaded }: ImageUploaderProps) {
       <div className="flex items-center justify-center w-full">
         <label
           htmlFor="dropzone-file"
-          className="flex flex-col items-center justify-center w-full h-64 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 dark:hover:bg-gray-800 dark:bg-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:hover:border-gray-500 dark:hover:bg-gray-600"
+          className="flex flex-col items-center justify-center w-full h-64 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:hover:border-gray-500 dark:hover:bg-gray-600"
           onDragOver={(e) => {
             e.preventDefault();
             e.stopPropagation();

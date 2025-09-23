@@ -27,7 +27,7 @@ export async function deleteProject(projectId: string): Promise<{ success: boole
     console.log(`Deleting project ${projectId} by user ${session.user.id}`);
 
     await prisma.$transaction([
-      prisma.image.deleteMany({ where: { projectId } }),
+      prisma.canvas.deleteMany({ where: { projectId } }),
       prisma.project.delete({ where: { id: projectId } }),
     ]);
 

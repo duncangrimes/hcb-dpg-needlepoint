@@ -313,11 +313,8 @@ export async function buildSegmentedManufacturerImage(
      labels: number[],
      centroidIndexToThreadRgb: (index: number) => [number, number, number],
    ): Promise<Buffer> {
-     // Use dithered manufacturer image for better color spread
-     // You may need the reduced PNG buffer and mapped palette as arguments for this:
-     // return await buildDitheredManufacturerImage(reducedPngBuffer, mappedPalette);
-   
-     // If you can't, fallback to the segmented approach:
+     // Fallback to segmented approach when dithering is not available
+     // This function is kept for backward compatibility
      const channels = 3;
      const out = Buffer.alloc(width * height * channels);
      for (let p = 0; p < width * height; p++) {
@@ -329,7 +326,7 @@ export async function buildSegmentedManufacturerImage(
      return sharp(out, { raw: { width, height, channels } }).png().toBuffer();
    }
 
-// Optional: Keep dithered version if you want to toggle later
+// Perceptual dithering using OKLab color space for better visual results
 export async function buildDitheredManufacturerImage(
   reducedPngBuffer: Buffer,
   mappedPalette: { original: number[]; thread: Thread }[],
@@ -377,7 +374,7 @@ export async function buildDitheredManufacturerImage(
     rgbData = converted.data;
   }
 
-  // Create a floating-point copy to accumulate errors
+  // Create floating-point RGB buffer for error accumulation
   const pixels = new Float32Array(rgbData.length);
   for (let i = 0; i < rgbData.length; i++) {
     pixels[i] = rgbData[i];
@@ -385,6 +382,7 @@ export async function buildDitheredManufacturerImage(
 
   const finalImageData = Buffer.alloc(rgbData.length);
   const toOklab = converter("oklab");
+  const toRgb = converter("rgb");
   const colorDifference = differenceEuclidean("oklab");
 
   // Pre-convert thread palette to OKLab for faster comparisons
@@ -393,19 +391,23 @@ export async function buildDitheredManufacturerImage(
     lab: toOklab({ r: thread.r / 255, g: thread.g / 255, b: thread.b / 255, mode: 'rgb' })
   }));
 
+  console.log(`🎨 Starting perceptual dithering with OKLab error propagation...`);
+
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const i = (y * width + x) * 3;
 
       // Get the current pixel's color (including propagated error)
-      const old_r = pixels[i];
-      const old_g = pixels[i + 1];
-      const old_b = pixels[i + 2];
+      const old_r = Math.max(0, Math.min(255, pixels[i]));
+      const old_g = Math.max(0, Math.min(255, pixels[i + 1]));
+      const old_b = Math.max(0, Math.min(255, pixels[i + 2]));
       
-      // Find the closest thread in the final palette
+      // Convert current pixel to OKLab for perceptual color matching
+      const currentLab = toOklab({ r: old_r / 255, g: old_g / 255, b: old_b / 255, mode: 'rgb' });
+      
+      // Find the closest thread in OKLab space
       let closest = threadPaletteLab[0];
       let minDiff = Infinity;
-      const currentLab = toOklab({ r: old_r / 255, g: old_g / 255, b: old_b / 255, mode: 'rgb' });
 
       for(const p of threadPaletteLab) {
         const diff = colorDifference(currentLab, p.lab);
@@ -424,31 +426,72 @@ export async function buildDitheredManufacturerImage(
       finalImageData[i+1] = new_g;
       finalImageData[i+2] = new_b;
       
-      // Calculate the color error
-      const err_r = old_r - new_r;
-      const err_g = old_g - new_g;
-      const err_b = old_b - new_b;
+      // Calculate error in OKLab space for perceptual dithering
+      const newLab = toOklab({ r: new_r / 255, g: new_g / 255, b: new_b / 255, mode: 'rgb' });
+      const errorLab = {
+        l: (currentLab.l as number) - (newLab.l as number),
+        a: (currentLab.a as number) - (newLab.a as number),
+        b: (currentLab.b as number) - (newLab.b as number),
+        mode: 'oklab' as const
+      };
 
-      // Propagate the error to neighboring pixels (Floyd-Steinberg)
+      // Convert error back to RGB for propagation
+      const errorRgb = toRgb(errorLab);
+      const err_r = (errorRgb.r as number) * 255;
+      const err_g = (errorRgb.g as number) * 255;
+      const err_b = (errorRgb.b as number) * 255;
+
+      // Propagate the perceptual error to neighboring pixels (Floyd-Steinberg)
       const p1 = i + 3;          // right
       const p2 = i + width * 3 - 3; // bottom-left
       const p3 = i + width * 3;     // bottom
       const p4 = i + width * 3 + 3; // bottom-right
 
       if (x < width - 1) {
-        pixels[p1] += err_r * 7/16; pixels[p1+1] += err_g * 7/16; pixels[p1+2] += err_b * 7/16;
+        pixels[p1] += err_r * 7/16; 
+        pixels[p1+1] += err_g * 7/16; 
+        pixels[p1+2] += err_b * 7/16;
       }
       if (y < height - 1) {
         if (x > 0) {
-          pixels[p2] += err_r * 3/16; pixels[p2+1] += err_g * 3/16; pixels[p2+2] += err_b * 3/16;
+          pixels[p2] += err_r * 3/16; 
+          pixels[p2+1] += err_g * 3/16; 
+          pixels[p2+2] += err_b * 3/16;
         }
-        pixels[p3] += err_r * 5/16; pixels[p3+1] += err_g * 5/16; pixels[p3+2] += err_b * 5/16;
+        pixels[p3] += err_r * 5/16; 
+        pixels[p3+1] += err_g * 5/16; 
+        pixels[p3+2] += err_b * 5/16;
         if (x < width - 1) {
-          pixels[p4] += err_r * 1/16; pixels[p4+1] += err_g * 1/16; pixels[p4+2] += err_b * 1/16;
+          pixels[p4] += err_r * 1/16; 
+          pixels[p4+1] += err_g * 1/16; 
+          pixels[p4+2] += err_b * 1/16;
         }
       }
     }
   }
 
+  console.log(`✅ Perceptual dithering completed`);
   return sharp(finalImageData, { raw: { width, height, channels: 3 } }).png().toBuffer();
+}
+
+// Enhanced anti-aliasing function for post-processing dithered images
+export async function applyEnhancedAntiAliasing(imageBuffer: Buffer): Promise<Buffer> {
+  console.log(`🔧 Applying enhanced anti-aliasing...`);
+  
+  return await sharp(imageBuffer)
+    .modulate({ saturation: 1.05, brightness: 1.01 }) // subtle final enhancement
+    // Multi-step anti-aliasing: targeted blur for high-contrast edges
+    .convolve({
+      width: 3,
+      height: 3,
+      kernel: [
+        -1, -1, -1,
+        -1, 16, -1,
+        -1, -1, -1
+      ]
+    })
+    .blur(0.3) // gentle blur to smooth harsh pixel edges
+    .sharpen({ sigma: 0.5, m1: 0.5, m2: 2.0, x1: 2.0, y2: 10.0 }) // selective sharpening
+    .png()
+    .toBuffer();
 }

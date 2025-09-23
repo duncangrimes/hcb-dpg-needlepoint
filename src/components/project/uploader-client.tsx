@@ -2,20 +2,39 @@
 
 import { ImageUploader } from "@/components/project/image-uploader";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 export function ProjectImageUploader({ projectId }: { projectId: string }) {
   const router = useRouter();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  
   return (
-    <ImageUploader
-      projectId={projectId}
-      onUploaded={() => {
-        // Trigger an immediate refresh, then a delayed one to catch server write completion
-        router.refresh();
-        setTimeout(() => {
-          router.refresh();
-        }, 800);
-      }}
-    />
+    <div className="relative">
+      <ImageUploader
+        projectId={projectId}
+        onUploaded={async () => {
+          setIsRefreshing(true);
+          try {
+            // Multiple refresh attempts to ensure the server state is updated
+            router.refresh();
+            await new Promise(resolve => setTimeout(resolve, 500));
+            router.refresh();
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            router.refresh();
+          } finally {
+            setIsRefreshing(false);
+          }
+        }}
+      />
+      {isRefreshing && (
+        <div className="absolute inset-0 bg-white/80 dark:bg-gray-800/80 flex items-center justify-center rounded-lg">
+          <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+            <div className="animate-spin h-4 w-4 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
+            Processing image...
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
