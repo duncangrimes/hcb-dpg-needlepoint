@@ -12,6 +12,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
+    const userId = session.user.id;
 
     const jsonResponse = await handleUpload({
       body,
@@ -33,7 +34,7 @@ export async function POST(request: Request): Promise<NextResponse> {
           select: { id: true, userId: true },
         });
 
-        if (!project || project.userId !== session.user.id) {
+        if (!project || project.userId !== userId) {
           throw new Error("Not authorized to upload to this project");
         }
 
@@ -41,7 +42,7 @@ export async function POST(request: Request): Promise<NextResponse> {
           allowedContentTypes: ["image/jpeg", "image/png", "image/webp"],
           addRandomSuffix: true,
           tokenPayload: JSON.stringify({
-            userId: session.user.id,
+            userId,
             projectId,
           }),
         };
