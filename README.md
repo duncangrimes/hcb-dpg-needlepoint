@@ -1,5 +1,31 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Needlepoint Image Processing
+
+This application converts uploaded images into needlepoint-ready designs using a two-step approach:
+
+1. **Google Gemini Enhancement**: Uses Google Gemini 2.5 Flash Image Preview to simplify, smooth, and enhance images for needlepoint embroidery
+2. **Color Quantization**: Reduces the enhanced image to the specified number of colors using advanced clustering algorithms
+
+## Environment Variables
+
+Create a `.env.local` file with the following variables:
+
+```bash
+# Database
+DATABASE_URL="postgresql://username:password@localhost:5432/needlejoint"
+
+# NextAuth
+NEXTAUTH_SECRET="your-secret-key"
+NEXTAUTH_URL="http://localhost:3000"
+
+# Vercel Blob Storage
+BLOB_READ_WRITE_TOKEN="your-vercel-blob-token"
+
+# Google Gemini API (for image enhancement)
+GEMINI_API_KEY="your-gemini-api-key"
+```
+
 ## Getting Started
 
 First, run the development server:

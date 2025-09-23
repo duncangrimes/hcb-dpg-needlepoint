@@ -6,7 +6,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import sharp from "sharp";
-import { buildManufacturerImage, getRepresentativeColors, getRepresentativeColorsMedianCut, getThreadPalette, mapColorsToThreads, buildSegmentedManufacturerImage, buildDitheredManufacturerImage } from "@/lib/colors";
+import { buildManufacturerImage, getRepresentativeColorsSimple, getThreadPalette, mapColorsToThreads, buildSegmentedManufacturerImage, buildDitheredManufacturerImage, processImageWithGemini } from "@/lib/colors";
 
 export async function POST(request: Request): Promise<NextResponse> {
   const body = (await request.json()) as HandleUploadBody;
@@ -106,14 +106,16 @@ export async function POST(request: Request): Promise<NextResponse> {
           const targetWidthInStitches = Math.round(w * mesh);
           const targetHeightInStitches = Math.round(canvasHeightInches * mesh);
 
-          // Resize using high-quality downsampling with moderate saturation boost for bright needlepoint
-          const reducedPngBuffer = await sharp(imageBuffer)
+          // NEW APPROACH: Use Gemini nano banana to simplify and enhance the image first
+          console.log(`🤖 Processing image with Gemini nano banana for simplification...`);
+          const geminiEnhancedBuffer = await processImageWithGemini(imageBuffer);
+
+          // Resize the Gemini-enhanced image to target dimensions (no additional processing needed)
+          const reducedPngBuffer = await sharp(geminiEnhancedBuffer)
             .resize(targetWidthInStitches, targetHeightInStitches, {
               kernel: sharp.kernel.lanczos3,
               fit: "fill", // ensure exact pixel grid without cropping
             })
-            .modulate({ saturation: 1.3, brightness: 1.02 }) // moderate saturation boost for bright results
-            .blur(0.5) // slight blur to smooth transitions
             .png()
             .toBuffer();
 
@@ -124,27 +126,20 @@ export async function POST(request: Request): Promise<NextResponse> {
             contentType: "image/png",
           });
 
-          // Use median-cut palette quantization for better color fidelity and shape preservation
-          console.log(`🖼️  Processing image: ${targetWidthInStitches}×${targetHeightInStitches} stitches, ${colors} colors`);
+          // Ultra-simple color reduction since Gemini already simplified the image
+          console.log(`🖼️  Processing Gemini-enhanced image: ${targetWidthInStitches}×${targetHeightInStitches} stitches, target: ${colors} colors`);
           
-          const { centroids, labels, width: reducedW, height: reducedH } = await getRepresentativeColorsMedianCut(
+          // Use simple color reduction - just take the most frequent colors
+          const { centroids, labels, width: reducedW, height: reducedH } = await getRepresentativeColorsSimple(
             reducedPngBuffer,
             colors
           );
           const palette = await getThreadPalette();
           const mapped = mapColorsToThreads(centroids, palette);
 
-          // Build manufacturer image using dithered approach for smoother results
-          console.log(`🎨 Building dithered manufacturer image: ${reducedW}×${reducedH} pixels`);
-          let manufacturerPngBuffer = await buildDitheredManufacturerImage(reducedPngBuffer, mapped);
-          
-          // Apply post-processing to smooth out pixelation while preserving needlepoint aesthetic
-          manufacturerPngBuffer = await sharp(manufacturerPngBuffer)
-            .modulate({ saturation: 1.05, brightness: 1.01 }) // subtle final enhancement
-            .blur(0.4) // gentle blur to smooth harsh pixel edges
-            .sharpen(0.2) // slight sharpening to maintain detail definition
-            .png()
-            .toBuffer();
+          // Build manufacturer image using segmented approach (no post-processing needed)
+          console.log(`🎨 Building manufacturer image: ${reducedW}×${reducedH} pixels`);
+          const manufacturerPngBuffer = await buildSegmentedManufacturerImage(reducedW, reducedH, labels, mapped.map(m => m.thread));
           const manufacturerBlobName = `manufacturer/${projectId}-${Date.now()}.png`;
           const manufacturerBlob = await put(manufacturerBlobName, manufacturerPngBuffer, {
             access: "public",

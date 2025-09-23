@@ -1,9 +1,9 @@
-// lib/colors.ts
 import sharp from "sharp";
 import skmeans from "skmeans";
 import { differenceEuclidean, converter, clampChroma } from "culori";
 import { z } from "zod";
 import * as IQ from "image-q";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const threadSchema = z.object({
   floss: z.string(),
@@ -66,13 +66,20 @@ export type RepresentativeColorsResult = {
 };
 
 // Median-cut palette quantization for better color fidelity and shape preservation
-export async function getRepresentativeColorsMedianCut(imageBuffer: Buffer, k: number): Promise<RepresentativeColorsResult> {
-  // Moderate saturation boost for bright needlepoint results
-  const enhancedBuffer = await sharp(imageBuffer)
-    .modulate({ saturation: 1.6, brightness: 1.05 }) // balanced saturation boost + slight brightness
-    .toBuffer();
+export async function getRepresentativeColorsMedianCut(
+  imageBuffer: Buffer, 
+  k: number,
+  enhance: boolean = true  // New optional param: skip if input is already Gemini-vibrant
+): Promise<RepresentativeColorsResult> {
+  let processingBuffer = imageBuffer;
+  if (enhance) {
+    // Moderate saturation boost for bright needlepoint results
+    processingBuffer = await sharp(imageBuffer)
+      .modulate({ saturation: 1.6, brightness: 1.05 }) // balanced saturation boost + slight brightness
+      .toBuffer();
+  }
 
-  const { data: pixelBuffer, info } = await sharp(enhancedBuffer)
+  const { data: pixelBuffer, info } = await sharp(processingBuffer)
     .ensureAlpha()
     .removeAlpha()
     .raw()
@@ -95,8 +102,8 @@ export async function getRepresentativeColorsMedianCut(imageBuffer: Buffer, k: n
     const min = Math.min(r, g, b);
     const saturation = max === 0 ? 0 : (max - min) / max;
     
-    // Moderate saturation boost for bright needlepoint results
-    const enhancedSaturation = Math.min(1, saturation * 1.4);
+    // Toned-down saturation boost for bright needlepoint results
+    const enhancedSaturation = Math.min(1, saturation * 1.2);
     const delta = max - min;
     const newDelta = enhancedSaturation * max;
     
@@ -112,7 +119,7 @@ export async function getRepresentativeColorsMedianCut(imageBuffer: Buffer, k: n
 
   console.log(`📊 Median-cut completed: ${centroids.length} colors found`);
 
-  // Create labels array by finding nearest palette color for each pixel
+  // Create labels array by finding nearest palette color for each pixel (use Euclidean for consistency)
   const labels = new Array(info.width * info.height);
   for (let i = 0; i < info.width * info.height; i++) {
     const pixelIndex = i * 3;
@@ -120,11 +127,17 @@ export async function getRepresentativeColorsMedianCut(imageBuffer: Buffer, k: n
     const g = pixelBuffer[pixelIndex + 1];
     const b = pixelBuffer[pixelIndex + 2];
     
-    // Find nearest palette color
-    let best = 0, min = Infinity;
+    // Find nearest palette color using Euclidean distance
+    let best = 0, minDistSq = Infinity;
     for (let j = 0; j < centroids.length; j++) {
-      const diff = Math.abs(r - centroids[j][0]) + Math.abs(g - centroids[j][1]) + Math.abs(b - centroids[j][2]);
-      if (diff < min) { min = diff; best = j; }
+      const dr = r - centroids[j][0];
+      const dg = g - centroids[j][1];
+      const db = b - centroids[j][2];
+      const distSq = dr * dr + dg * dg + db * db;
+      if (distSq < minDistSq) { 
+        minDistSq = distSq; 
+        best = j; 
+      }
     }
     labels[i] = best;
   }
@@ -137,150 +150,213 @@ export async function getRepresentativeColorsMedianCut(imageBuffer: Buffer, k: n
   };
 }
 
-export async function getRepresentativeColors(
-     imageBuffer: Buffer,
-     k: number,
-     spatialWeight: number,
-     maxSamples = 50000,
-     boostSaturation = false, // new param
-   ): Promise<RepresentativeColorsResult> {
-    let bufferToUse = imageBuffer;
-    if (boostSaturation) {
-      // Moderate saturation boost for bright needlepoint results
-      bufferToUse = await sharp(imageBuffer).modulate({ saturation: 1.5, brightness: 1.05 }).toBuffer();
-    }
-    const { data: pixelBuffer, info } = await sharp(bufferToUse)
-      .blur(0.5)
-      .ensureAlpha()
-      .removeAlpha()
-      .raw()
-      .toBuffer({ resolveWithObject: true });
+// Ultra-simple color reduction for Gemini-preprocessed images
+export async function getRepresentativeColorsSimple(
+  imageBuffer: Buffer,
+  targetColors: number
+): Promise<RepresentativeColorsResult> {
+  // Just get the raw pixel data - no processing since Gemini already handled it
+  const { data: pixelBuffer, info } = await sharp(imageBuffer)
+    .ensureAlpha()
+    .removeAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  const channels = 3;
+  const totalPixels = info.width * info.height;
   
-    // Weaken spatialWeight for more color diversity
-    spatialWeight = Math.max(1, spatialWeight * 0.5);
+  console.log(`🔍 Simple color reduction: ${info.width}×${info.height} pixels, target: ${targetColors} colors`);
+
+  // Count all unique colors in the image
+  const colorMap = new Map<string, { count: number; rgb: [number, number, number] }>();
   
-    const channels = 3;
-    const totalPixels = pixelBuffer.length / channels;
+  for (let i = 0; i < pixelBuffer.length; i += channels) {
+    const r = pixelBuffer[i];
+    const g = pixelBuffer[i + 1];
+    const b = pixelBuffer[i + 2];
+    const key = `${r},${g},${b}`;
     
-    console.log(`🔍 K-means clustering: ${info.width}×${info.height} pixels, ${totalPixels} total, spatial weight: ${spatialWeight.toFixed(2)}`);
-
-    // Subsample indices
-    const indices: number[] = [];
-    if (totalPixels <= maxSamples) {
-        for (let i = 0; i < totalPixels; i++) indices.push(i);
+    if (colorMap.has(key)) {
+      colorMap.get(key)!.count++;
     } else {
-        const step = Math.ceil(totalPixels / maxSamples);
-        for (let i = 0; i < totalPixels; i += step) indices.push(i);
+      colorMap.set(key, { count: 1, rgb: [r, g, b] });
     }
+  }
 
-    // Build 5D points: OKLab + spatial
-    const toOklab = converter("oklab");
-    const toRgb = converter("rgb");
-    const pixels5D: number[][] = new Array(indices.length);
-    const { width, height } = info;
-    for (let j = 0; j < indices.length; j++) {
-        const p = indices[j];
-        const i = p * channels;
-        const lab = toOklab({ r: pixelBuffer[i] / 255, g: pixelBuffer[i + 1] / 255, b: pixelBuffer[i + 2] / 255, mode: "rgb" }) as any;
-        const x = p % width;
-        const y = Math.floor(p / width);
-        pixels5D[j] = [lab.l as number, lab.a as number, lab.b as number, x / spatialWeight, y / spatialWeight];
-    }
+  console.log(`📊 Found ${colorMap.size} unique colors in image`);
 
-    const result = skmeans(pixels5D, k, "kmpp");
-    console.log(`📊 K-means completed: ${result.centroids.length} centroids found`);
-
-    // Extract OKLab centroids, convert to RGB, and CLAMP for gamut safety
-    const centroidsLab = (result.centroids as number[][]).map((c) => [c[0], c[1], c[2]]);
-    const centroids = centroidsLab.map((lab, idx) => {
-        let rgb = toRgb({ mode: "oklab", l: lab[0], a: lab[1], b: lab[2] }) as any;
-        // Clamp chroma to avoid desaturated/out-of-gamut colors post-centroiding
-        rgb = clampChroma(rgb, "oklab");
-        const r = Math.max(0, Math.min(255, Math.round((rgb.r as number) * 255)));
-        const g = Math.max(0, Math.min(255, Math.round((rgb.g as number) * 255)));
-        const b = Math.max(0, Math.min(255, Math.round((rgb.b as number) * 255)));
-        console.log(`  🎨 Centroid ${idx + 1}: OKLab(${lab.map(x => x.toFixed(2)).join(', ')}) → RGB(${r}, ${g}, ${b})`);
-        return [r, g, b];
-    });
-
-    // Assign labels for ALL pixels
+  // If we already have fewer colors than target, just use what we have
+  if (colorMap.size <= targetColors) {
+    console.log(`✅ Image already has ${colorMap.size} colors (≤ ${targetColors}), no reduction needed`);
+    
+    const centroids = Array.from(colorMap.values()).map(({ rgb }) => rgb);
     const labels = new Array<number>(totalPixels);
+    
+    // Create a reverse lookup for fast pixel-to-color mapping
+    const colorToIndex = new Map<string, number>();
+    centroids.forEach((rgb, index) => {
+      colorToIndex.set(`${rgb[0]},${rgb[1]},${rgb[2]}`, index);
+    });
+    
+    // Assign labels
     for (let p = 0; p < totalPixels; p++) {
-        const base = p * channels;
-        const lab = toOklab({ r: pixelBuffer[base] / 255, g: pixelBuffer[base + 1] / 255, b: pixelBuffer[base + 2] / 255, mode: "rgb" }) as any;
-        const x = p % width;
-        const y = Math.floor(p / width);
-        let minD = Infinity;
-        let best = 0;
-        for (let cIdx = 0; cIdx < (result.centroids as number[][]).length; cIdx++) {
-        const c = (result.centroids as number[][])[cIdx];
-        const dl = lab.l - c[0];
-        const da = lab.a - c[1];
-        const db = lab.b - c[2];
-        const dx = x / spatialWeight - c[3];
-        const dy = y / spatialWeight - c[4];
-        const d = dl * dl + da * da + db * db + dx * dx + dy * dy;
-        if (d < minD) {
-            minD = d;
-            best = cIdx;
-        }
-        }
-        labels[p] = best;
+      const base = p * channels;
+      if (base + 2 >= pixelBuffer.length) break;
+      
+      const r = pixelBuffer[base];
+      const g = pixelBuffer[base + 1];
+      const b = pixelBuffer[base + 2];
+      const key = `${r},${g},${b}`;
+      
+      labels[p] = colorToIndex.get(key) || 0;
     }
-
+    
     return { centroids, labels, width: info.width, height: info.height };
+  }
+
+  // More aggressive approach: group similar colors first, then take most frequent
+  console.log(`🔄 Reducing ${colorMap.size} colors to ${targetColors} colors with grouping`);
+  
+  // First, group very similar colors together (within 40 RGB distance)
+  const colorGroups: { representative: [number, number, number]; colors: Array<{ rgb: [number, number, number]; count: number }> }[] = [];
+  const SIMILARITY_THRESHOLD = 40; // Group similar colors together
+  
+  for (const [key, data] of colorMap.entries()) {
+    let addedToGroup = false;
+    
+    // Try to add to existing group
+    for (const group of colorGroups) {
+      const [r1, g1, b1] = group.representative;
+      const [r2, g2, b2] = data.rgb;
+      const distSq = Math.pow(r1 - r2, 2) + Math.pow(g1 - g2, 2) + Math.pow(b1 - b2, 2);
+      const distance = Math.sqrt(distSq);
+      
+      if (distance <= SIMILARITY_THRESHOLD) {
+        group.colors.push(data);
+        addedToGroup = true;
+        break;
+      }
+    }
+    
+    // Create new group if not added to existing
+    if (!addedToGroup) {
+      colorGroups.push({
+        representative: data.rgb,
+        colors: [data]
+      });
+    }
+  }
+  
+  console.log(`📊 Grouped ${colorMap.size} colors into ${colorGroups.length} similar groups`);
+  
+  // Calculate total count for each group and sort by frequency
+  const groupFrequencies = colorGroups.map(group => ({
+    representative: group.representative,
+    totalCount: group.colors.reduce((sum, color) => sum + color.count, 0)
+  }));
+  
+  // Sort by frequency and take the top N
+  const sortedGroups = groupFrequencies
+    .sort((a, b) => b.totalCount - a.totalCount)
+    .slice(0, targetColors);
+  
+  const finalColors = sortedGroups.map(g => g.representative);
+
+  console.log(`📊 Using ${finalColors.length} most frequent color groups`);
+  finalColors.forEach((color, idx) => {
+    console.log(`  🎨 Color ${idx + 1}: RGB(${color[0]}, ${color[1]}, ${color[2]})`);
+  });
+
+  // Create a mapping from original colors to final colors
+  const colorToIndexMap = new Map<string, number>();
+  
+  // Map each original color to its closest final color
+  for (const [key, data] of colorMap.entries()) {
+    const [r, g, b] = data.rgb;
+    let minDistSq = Infinity;
+    let bestIndex = 0;
+    
+    for (let i = 0; i < finalColors.length; i++) {
+      const [fr, fg, fb] = finalColors[i];
+      const distSq = Math.pow(r - fr, 2) + Math.pow(g - fg, 2) + Math.pow(b - fb, 2);
+      
+      if (distSq < minDistSq) {
+        minDistSq = distSq;
+        bestIndex = i;
+      }
+    }
+    
+    colorToIndexMap.set(key, bestIndex);
+  }
+  
+  // Assign labels for all pixels using the pre-computed mapping
+  const labels = new Array<number>(totalPixels);
+  for (let p = 0; p < totalPixels; p++) {
+    const base = p * channels;
+    if (base + 2 >= pixelBuffer.length) break;
+    
+    const r = pixelBuffer[base];
+    const g = pixelBuffer[base + 1];
+    const b = pixelBuffer[base + 2];
+    const key = `${r},${g},${b}`;
+    
+    // Use pre-computed mapping for faster lookup
+    labels[p] = colorToIndexMap.get(key) || 0;
+  }
+
+  return { centroids: finalColors, labels, width: info.width, height: info.height };
 }
 
 export function mapColorsToThreads(representativeColors: number[][], threadPalette: Thread[]) {
-    const colorDifference = differenceEuclidean("oklab");
-    const toOklab = converter("oklab");
-    const MINDIFF_THRESHOLD = 0.08; // Even lower threshold for more vibrant results
+  const colorDifference = differenceEuclidean("oklab");
+  const toOklab = converter("oklab");
+  const MINDIFF_THRESHOLD = 0.12; // Increased from 0.08 for stricter duplicate avoidance
   
-    // Sort thread palette by vibrancy (saturation) to prioritize vibrant colors
-    const vibrantThreads = [...threadPalette].sort((a, b) => {
-      const aSat = getSaturation(a.r, a.g, a.b);
-      const bSat = getSaturation(b.r, b.g, b.b);
-      // Also consider brightness for even more vibrant results
-      const aBrightness = (a.r + a.g + a.b) / 3;
-      const bBrightness = (b.r + b.g + b.b) / 3;
-      const aScore = aSat * 0.7 + (aBrightness / 255) * 0.3;
-      const bScore = bSat * 0.7 + (bBrightness / 255) * 0.3;
-      return bScore - aScore; // higher vibrancy + brightness first
-    });
+  // Sort thread palette by vibrancy (saturation) to prioritize vibrant colors
+  const vibrantThreads = [...threadPalette].sort((a, b) => {
+    const aSat = getSaturation(a.r, a.g, a.b);
+    const bSat = getSaturation(b.r, b.g, b.b);
+    // Also consider brightness for even more vibrant results
+    const aBrightness = (a.r + a.g + a.b) / 3;
+    const bBrightness = (b.r + b.g + b.b) / 3;
+    const aScore = aSat * 0.7 + (aBrightness / 255) * 0.3;
+    const bScore = bSat * 0.7 + (bBrightness / 255) * 0.3;
+    return bScore - aScore; // higher vibrancy + brightness first
+  });
   
-    const mappings: { original: number[]; thread: Thread }[] = [];
-    const usedThreads = new Set<string>();
-    for (let i = 0; i < representativeColors.length; i++) {
-      const rgbColor = representativeColors[i];
-      const targetColor = toOklab({ r: rgbColor[0] / 255, g: rgbColor[1] / 255, b: rgbColor[2] / 255, mode: "rgb" });
-      let bestMatch: Thread | null = null;
-      let minDifference = Infinity;
-  
-      // Try vibrant threads first
-      for (const thread of vibrantThreads) {
-        const threadColor = toOklab({ r: thread.r / 255, g: thread.g / 255, b: thread.b / 255, mode: "rgb" });
-        const difference = colorDifference(targetColor, threadColor);
-        if (difference < minDifference) {
-          minDifference = difference;
-          bestMatch = thread;
-        }
-      }
-      // Map if duplicate and sufficiently different
-      if (bestMatch && (!usedThreads.has(bestMatch.floss) || minDifference >= MINDIFF_THRESHOLD)) {
-        usedThreads.add(bestMatch.floss);
-        mappings.push({ original: rgbColor, thread: bestMatch });
-      } else if (bestMatch) {
-        // Accept duplicate if nothing else is close enough, but log it
-        mappings.push({ original: rgbColor, thread: bestMatch });
+  const mappings: { original: number[]; thread: Thread }[] = [];
+  const usedThreads = new Set<string>();
+  for (let i = 0; i < representativeColors.length; i++) {
+    const rgbColor = representativeColors[i];
+    const targetColor = toOklab({ r: rgbColor[0] / 255, g: rgbColor[1] / 255, b: rgbColor[2] / 255, mode: "rgb" });
+    let bestMatch: Thread | null = null;
+    let minDifference = Infinity;
+
+    // Try vibrant threads first
+    for (const thread of vibrantThreads) {
+      const threadColor = toOklab({ r: thread.r / 255, g: thread.g / 255, b: thread.b / 255, mode: "rgb" });
+      const difference = colorDifference(targetColor, threadColor);
+      if (difference < minDifference) {
+        minDifference = difference;
+        bestMatch = thread;
       }
     }
-    // For padding, use other available threads randomly
-    while (mappings.length < representativeColors.length) {
-      const randomThread = threadPalette[Math.floor(Math.random() * threadPalette.length)];
-      mappings.push({ original: [randomThread.r, randomThread.g, randomThread.b], thread: randomThread });
+    // Map if duplicate and sufficiently different
+    if (bestMatch && (!usedThreads.has(bestMatch.floss) || minDifference >= MINDIFF_THRESHOLD)) {
+      usedThreads.add(bestMatch.floss);
+      mappings.push({ original: rgbColor, thread: bestMatch });
+    } else if (bestMatch) {
+      // Accept duplicate if nothing else is close enough, but log it
+      mappings.push({ original: rgbColor, thread: bestMatch });
     }
-    return mappings;
   }
+  // For padding, use other available threads randomly
+  while (mappings.length < representativeColors.length) {
+    const randomThread = threadPalette[Math.floor(Math.random() * threadPalette.length)];
+    mappings.push({ original: [randomThread.r, randomThread.g, randomThread.b], thread: randomThread });
+  }
+  return mappings;
+}
 
 // Helper function to calculate color saturation
 function getSaturation(r: number, g: number, b: number): number {
@@ -289,7 +365,7 @@ function getSaturation(r: number, g: number, b: number): number {
   return max === 0 ? 0 : (max - min) / max;
 }
 
-// Shape-preserving segmentation using quantized pixel assignments
+// Shape-preserving segmentation using quantized pixel assignments with smoothing
 export async function buildSegmentedManufacturerImage(
   width: number, 
   height: number, 
@@ -298,13 +374,21 @@ export async function buildSegmentedManufacturerImage(
 ): Promise<Buffer> {
   const channels = 3;
   const out = Buffer.alloc(width * height * channels);
+  
+  // First, create the raw segmented image
   for (let i = 0; i < width * height; i++) {
     const rgb = [mappedThreads[labels[i]].r, mappedThreads[labels[i]].g, mappedThreads[labels[i]].b];
     out[i * channels] = rgb[0];
     out[i * channels + 1] = rgb[1];
     out[i * channels + 2] = rgb[2];
   }
-  return sharp(out, { raw: { width, height, channels } }).png().toBuffer();
+  
+  // Apply smoothing to create cleaner color blocks
+  return sharp(out, { raw: { width, height, channels } })
+    .blur(0.8) // Gentle blur to smooth out pixelation
+    .sharpen(0.3) // Slight sharpening to maintain edges
+    .png()
+    .toBuffer();
 }
 
    export async function buildManufacturerImage(
@@ -451,4 +535,70 @@ export async function buildDitheredManufacturerImage(
   }
 
   return sharp(finalImageData, { raw: { width, height, channels: 3 } }).png().toBuffer();
+}
+
+// New Gemini nano banana processing function using proper image generation
+export async function processImageWithGemini(imageBuffer: Buffer): Promise<Buffer> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY environment variable is required");
+  }
+
+  const genAI = new GoogleGenerativeAI(apiKey);
+  
+  // Convert buffer to base64 for Gemini
+  const base64Image = imageBuffer.toString('base64');
+  const mimeType = 'image/png';
+
+  const prompt = "Make this image more simple, smooth and brightly colored, and 2D with edges. Simplify the details while maintaining the overall composition and make the colors more vibrant and saturated. Focus on creating clean, defined shapes with smooth edges that would work well for needlepoint embroidery.";
+
+  try {
+    // Use the image generation model for proper image-to-image processing
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-image-preview" });
+    
+    const result = await model.generateContent([
+      {
+        text: prompt
+      },
+      {
+        inlineData: {
+          data: base64Image,
+          mimeType: mimeType
+        }
+      }
+    ]);
+
+    const response = await result.response;
+    
+    // Extract the generated image from the response
+    if (response.candidates && response.candidates[0] && response.candidates[0].content && response.candidates[0].content.parts) {
+      for (const part of response.candidates[0].content.parts) {
+        if (part.inlineData) {
+          const imageData = part.inlineData.data;
+          const buffer = Buffer.from(imageData, "base64");
+          console.log("🎨 Gemini image generation completed successfully");
+          return buffer;
+        }
+      }
+    }
+    
+    // If no image was generated, fall back to enhanced processing
+    console.log("🎨 No image generated by Gemini, using enhanced fallback");
+    return await sharp(imageBuffer)
+      .modulate({ saturation: 1.8, brightness: 1.1 })
+      .blur(1.0)
+      .sharpen(0.5)
+      .png()
+      .toBuffer();
+      
+  } catch (error) {
+    console.error("Error processing image with Gemini:", error);
+    // Fallback to enhanced sharp processing
+    return await sharp(imageBuffer)
+      .modulate({ saturation: 1.8, brightness: 1.1 })
+      .blur(1.0)
+      .sharpen(0.5)
+      .png()
+      .toBuffer();
+  }
 }
