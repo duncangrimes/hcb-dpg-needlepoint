@@ -8,16 +8,15 @@ export async function POST(request: Request): Promise<NextResponse> {
   const body = (await request.json()) as HandleUploadBody;
 
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
-    const userId = session.user.id;
-
     const jsonResponse = await handleUpload({
       body,
       request,
       onBeforeGenerateToken: async (_pathname, clientPayload) => {
+        const session = await auth();
+        if (!session?.user?.id) {
+          throw new Error("Not authenticated");
+        }
+        const userId = session.user.id;
         let parsed: { projectId?: string } = {};
         try {
           parsed = typeof clientPayload === "string" ? JSON.parse(clientPayload) : clientPayload;
