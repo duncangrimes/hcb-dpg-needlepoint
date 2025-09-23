@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useActionState, useState, useCallback } from "react";
 import { useFormStatus } from "react-dom";
+import { ProjectCard } from "@/components/dashboard/project-card";
 
 type ProjectWithImages = Awaited<ReturnType<typeof getProjects>>[number];
 
@@ -96,25 +97,13 @@ export default function DashboardPage() {
         ) : (
           <div className="mt-6 grid grid-cols-1 gap-x-6 gap-y-10 sm:grid-cols-2 lg:grid-cols-4 xl:gap-x-8">
             {projects.map((project) => (
-              <div key={project.id} className="group relative min-h-4">
-                <div className="aspect-square w-full overflow-hidden rounded-md bg-gray-200 object-cover group-hover:opacity-75 dark:bg-gray-700 lg:h-80">
-                  <img
-                    alt={project.title}
-                    src={project.images[0]?.url || 'https://tailwindui.com/img/ecommerce-images/product-page-01-related-product-01.jpg'}
-                    className="h-full w-full object-cover object-center"
-                  />
-                </div>
-                <div className="mt-4 flex justify-between">
-                  <div>
-                    <h3 className="text-sm text-gray-700 dark:text-gray-300">
-                      <a href={`/project/${project.id}`}>
-                        <span aria-hidden="true" className="absolute inset-0" />
-                        {project.title}
-                      </a>
-                    </h3>
-                  </div>
-                </div>
-              </div>
+              <ProjectCard
+                key={project.id}
+                id={project.id}
+                title={project.title}
+                imageUrl={project.images[0]?.url}
+                onDeleted={fetchProjects}
+              />
             ))}
           </div>
         )}
