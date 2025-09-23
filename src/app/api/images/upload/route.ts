@@ -66,10 +66,15 @@ export async function POST(request: Request): Promise<NextResponse> {
             throw new Error("Not authorized to save image for this project");
           }
 
-          await prisma.image.create({
+          // Create a new Canvas for this project with the uploaded URL as the original image
+          await prisma.canvas.create({
             data: {
-              url: blob.url,
               projectId,
+              originalImage: blob.url,
+              displayImage: blob.url, // initial display can mirror original until processing
+              manufacturerImage: "", // to be generated later
+              meshCount: 13, // sensible default; adjust as needed from client payload later
+              width: 8.0, // sensible default inches/cm depending on your choice
             },
           });
 

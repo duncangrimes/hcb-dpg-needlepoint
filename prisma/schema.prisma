@@ -65,21 +65,18 @@ model Project {
   title     String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId    String
-  images   Image[]
+  canvases  Canvas[]
 }
 
-model Image {
-  id        String   @id @default(cuid())
-  url       String
-  project  Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  projectId String
-  canvas    Canvas?
-}
 
 model Canvas {
   id                 String @id @default(cuid())
-  image              Image  @relation(fields: [imageId], references: [id], onDelete: Cascade)
-  imageId            String @unique
+  project            Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId          String
+  
+  // Canvas configuration
+  meshCount          Int
+  width              Float
 
   // The original uploaded image before conversion
   originalImage      String

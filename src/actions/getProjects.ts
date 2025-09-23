@@ -22,9 +22,9 @@ export async function getProjects({ page = 1, limit = 12 }: { page?: number, lim
             userId: session.user.id,
         },
         include: {
-            images: {
-                take: 1,
-            },
+          canvases: {
+              take: 1,
+          },
         },
         orderBy: {
             title: 'asc',

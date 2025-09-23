@@ -101,7 +101,7 @@ export default function DashboardPage() {
                 key={project.id}
                 id={project.id}
                 title={project.title}
-                imageUrl={project.images[0]?.url}
+                imageUrl={project.canvases[0]?.originalImage}
                 onDeleted={fetchProjects}
               />
             ))}
