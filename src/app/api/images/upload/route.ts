@@ -18,7 +18,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       body,
       request,
       onBeforeGenerateToken: async (_pathname, clientPayload) => {
-        let parsed: any = {};
+        let parsed: { projectId?: string } = {};
         try {
           parsed = typeof clientPayload === "string" ? JSON.parse(clientPayload) : clientPayload;
         } catch {}
