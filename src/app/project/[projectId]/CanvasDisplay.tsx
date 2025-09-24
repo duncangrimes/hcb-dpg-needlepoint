@@ -1,3 +1,5 @@
+import Image from "next/image";
+
 type CanvasDisplayProps = {
   title: string;
   originalImage: string;
@@ -14,15 +16,15 @@ export function CanvasDisplay({ title, originalImage, reducedImage, manufacturer
       <div className="grid grid-cols-1 md:grid-cols-3 gap-px bg-gray-200 dark:bg-white/10">
         <div className="bg-white dark:bg-gray-800 p-2">
           <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Original</div>
-          <img alt={`${title} original`} src={originalImage} className="w-full h-auto max-h-[28rem] object-contain bg-gray-50 dark:bg-gray-900" />
+          <Image alt={`${title} original`} src={originalImage} width={400} height={400} className="w-full h-auto max-h-[28rem] object-contain bg-gray-50 dark:bg-gray-900" />
         </div>
         <div className="bg-white dark:bg-gray-800 p-2">
           <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Reduced</div>
-          <img alt={`${title} reduced`} src={reducedImage ?? originalImage} className="w-full h-auto max-h-[28rem] object-contain bg-gray-50 dark:bg-gray-900" />
+          <Image alt={`${title} reduced`} src={reducedImage ?? originalImage} width={400} height={400} className="w-full h-auto max-h-[28rem] object-contain bg-gray-50 dark:bg-gray-900" />
         </div>
         <div className="bg-white dark:bg-gray-800 p-2">
           <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Manufacturer</div>
-          <img alt={`${title} manufacturer`} src={manufacturerImage ?? reducedImage ?? originalImage} className="w-full h-auto max-h-[28rem] object-contain bg-gray-50 dark:bg-gray-900" />
+          <Image alt={`${title} manufacturer`} src={manufacturerImage ?? reducedImage ?? originalImage} width={400} height={400} className="w-full h-auto max-h-[28rem] object-contain bg-gray-50 dark:bg-gray-900" />
         </div>
       </div>
       <div className="px-4 py-3 border-t border-gray-200 dark:border-white/10 text-sm text-gray-700 dark:text-gray-300 grid grid-cols-1 sm:grid-cols-3 gap-2">

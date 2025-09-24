@@ -88,7 +88,7 @@ export async function getRepresentativeColorsMedianCut(imageBuffer: Buffer, k: n
   
   // Get palette colors and enhance them for vibrancy
   const paletteColors = palette.getPointContainer().getPointArray();
-  const centroids = paletteColors.map((pt: any) => {
+  const centroids = paletteColors.map((pt: { r: number; g: number; b: number }) => {
     // Enhance color vibrancy by boosting saturation
     const [r, g, b] = [pt.r, pt.g, pt.b];
     const max = Math.max(r, g, b);
@@ -181,10 +181,10 @@ export async function getRepresentativeColors(
     for (let j = 0; j < indices.length; j++) {
         const p = indices[j];
         const i = p * channels;
-        const lab = toOklab({ r: pixelBuffer[i] / 255, g: pixelBuffer[i + 1] / 255, b: pixelBuffer[i + 2] / 255, mode: "rgb" }) as any;
+        const lab = toOklab({ r: pixelBuffer[i] / 255, g: pixelBuffer[i + 1] / 255, b: pixelBuffer[i + 2] / 255, mode: "rgb" }) as { l: number; a: number; b: number; mode: "oklab" };
         const x = p % width;
         const y = Math.floor(p / width);
-        pixels5D[j] = [lab.l as number, lab.a as number, lab.b as number, x / spatialWeight, y / spatialWeight];
+        pixels5D[j] = [lab.l, lab.a, lab.b, x / spatialWeight, y / spatialWeight];
     }
 
     const result = skmeans(pixels5D, k, "kmpp");
@@ -193,12 +193,12 @@ export async function getRepresentativeColors(
     // Extract OKLab centroids, convert to RGB, and CLAMP for gamut safety
     const centroidsLab = (result.centroids as number[][]).map((c) => [c[0], c[1], c[2]]);
     const centroids = centroidsLab.map((lab, idx) => {
-        let rgb = toRgb({ mode: "oklab", l: lab[0], a: lab[1], b: lab[2] }) as any;
+        let rgb = toRgb({ mode: "oklab", l: lab[0], a: lab[1], b: lab[2] }) as { r: number; g: number; b: number; mode: "rgb" };
         // Clamp chroma to avoid desaturated/out-of-gamut colors post-centroiding
         rgb = clampChroma(rgb, "oklab");
-        const r = Math.max(0, Math.min(255, Math.round((rgb.r as number) * 255)));
-        const g = Math.max(0, Math.min(255, Math.round((rgb.g as number) * 255)));
-        const b = Math.max(0, Math.min(255, Math.round((rgb.b as number) * 255)));
+        const r = Math.max(0, Math.min(255, Math.round(rgb.r * 255)));
+        const g = Math.max(0, Math.min(255, Math.round(rgb.g * 255)));
+        const b = Math.max(0, Math.min(255, Math.round(rgb.b * 255)));
         console.log(`  🎨 Centroid ${idx + 1}: OKLab(${lab.map(x => x.toFixed(2)).join(', ')}) → RGB(${r}, ${g}, ${b})`);
         return [r, g, b];
     });
@@ -207,7 +207,7 @@ export async function getRepresentativeColors(
     const labels = new Array<number>(totalPixels);
     for (let p = 0; p < totalPixels; p++) {
         const base = p * channels;
-        const lab = toOklab({ r: pixelBuffer[base] / 255, g: pixelBuffer[base + 1] / 255, b: pixelBuffer[base + 2] / 255, mode: "rgb" }) as any;
+        const lab = toOklab({ r: pixelBuffer[base] / 255, g: pixelBuffer[base + 1] / 255, b: pixelBuffer[base + 2] / 255, mode: "rgb" }) as { l: number; a: number; b: number; mode: "oklab" };
         const x = p % width;
         const y = Math.floor(p / width);
         let minD = Infinity;
@@ -403,7 +403,7 @@ export async function buildDitheredManufacturerImage(
       const old_b = Math.max(0, Math.min(255, pixels[i + 2]));
       
       // Convert current pixel to OKLab for perceptual color matching
-      const currentLab = toOklab({ r: old_r / 255, g: old_g / 255, b: old_b / 255, mode: 'rgb' });
+      const currentLab = toOklab({ r: old_r / 255, g: old_g / 255, b: old_b / 255, mode: 'rgb' }) as { l: number; a: number; b: number; mode: "oklab" };
       
       // Find the closest thread in OKLab space
       let closest = threadPaletteLab[0];
@@ -427,19 +427,19 @@ export async function buildDitheredManufacturerImage(
       finalImageData[i+2] = new_b;
       
       // Calculate error in OKLab space for perceptual dithering
-      const newLab = toOklab({ r: new_r / 255, g: new_g / 255, b: new_b / 255, mode: 'rgb' });
+      const newLab = toOklab({ r: new_r / 255, g: new_g / 255, b: new_b / 255, mode: 'rgb' }) as { l: number; a: number; b: number; mode: "oklab" };
       const errorLab = {
-        l: (currentLab.l as number) - (newLab.l as number),
-        a: (currentLab.a as number) - (newLab.a as number),
-        b: (currentLab.b as number) - (newLab.b as number),
+        l: currentLab.l - newLab.l,
+        a: currentLab.a - newLab.a,
+        b: currentLab.b - newLab.b,
         mode: 'oklab' as const
       };
 
       // Convert error back to RGB for propagation
-      const errorRgb = toRgb(errorLab);
-      const err_r = (errorRgb.r as number) * 255;
-      const err_g = (errorRgb.g as number) * 255;
-      const err_b = (errorRgb.b as number) * 255;
+      const errorRgb = toRgb(errorLab) as { r: number; g: number; b: number; mode: "rgb" };
+      const err_r = errorRgb.r * 255;
+      const err_g = errorRgb.g * 255;
+      const err_b = errorRgb.b * 255;
 
       // Propagate the perceptual error to neighboring pixels (Floyd-Steinberg)
       const p1 = i + 3;          // right
