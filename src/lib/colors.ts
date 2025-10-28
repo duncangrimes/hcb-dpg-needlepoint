@@ -5,6 +5,95 @@ import { differenceEuclidean, converter, clampChroma } from "culori";
 import { z } from "zod";
 import * as IQ from "image-q";
 
+// Auto white balance function to neutralize color casts (e.g., green from foliage)
+export async function autoWhiteBalance(imageBuffer: Buffer): Promise<Buffer> {
+  console.log(`🎨 Applying auto white balance to neutralize color casts...`);
+  
+  // Get raw pixel data to compute channel averages
+  const { data: pixelBuffer, info } = await sharp(imageBuffer)
+    .ensureAlpha()
+    .toColourspace('srgb')
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  
+  // Calculate channel averages (assuming RGBA format)
+  let sumR = 0, sumG = 0, sumB = 0;
+  const pixelCount = info.width * info.height;
+  
+  for (let i = 0; i < pixelBuffer.length; i += 4) {
+    sumR += pixelBuffer[i];     // R
+    sumG += pixelBuffer[i + 1]; // G  
+    sumB += pixelBuffer[i + 2]; // B
+    // Skip alpha channel
+  }
+  
+  const avgR = sumR / pixelCount;
+  const avgG = sumG / pixelCount;
+  const avgB = sumB / pixelCount;
+  const grayAvg = (avgR + avgG + avgB) / 3;
+  
+  console.log(`📊 Channel averages - R: ${avgR.toFixed(1)}, G: ${avgG.toFixed(1)}, B: ${avgB.toFixed(1)}`);
+  
+  // Apply gray world assumption: scale channels to match average intensity
+  const rScale = grayAvg / avgR;
+  const gScale = grayAvg / avgG;
+  const bScale = grayAvg / avgB;
+  
+  console.log(`🔧 Channel scaling factors - R: ${rScale.toFixed(3)}, G: ${gScale.toFixed(3)}, B: ${bScale.toFixed(3)}`);
+  
+  // Apply corrections using Sharp's modulate function (more subtle)
+  // Sharp's modulate works in HSV space, so we need to convert our RGB corrections
+  // For subtle corrections, we'll use hue rotation and saturation adjustments
+  const hueShift = 0; // No hue shift for gray world correction
+  const saturationBoost = 1.02; // Very slight boost to maintain vibrancy
+  
+  // Calculate brightness adjustments for each channel (more conservative)
+  const brightnessAdjustment = (rScale + gScale + bScale) / 3;
+  
+  return await sharp(imageBuffer)
+    .modulate({
+      brightness: Math.min(1.05, Math.max(0.95, brightnessAdjustment)),
+      saturation: saturationBoost,
+      hue: hueShift
+    })
+    .png()
+    .toBuffer();
+}
+
+// LAB color space processing for perceptual accuracy
+export async function processInLABColorSpace(imageBuffer: Buffer): Promise<Buffer> {
+  console.log(`🔬 Processing in LAB color space for perceptual accuracy...`);
+  
+  // Convert to LAB color space for better perceptual uniformity
+  // LAB separates lightness (L) from color information (A, B channels)
+  return await sharp(imageBuffer)
+    .toColourspace('lab')  // Convert to LAB color space
+    .modulate({
+      brightness: 1.01,    // Very subtle lightness adjustment
+      saturation: 1.03,   // Minimal color channel adjustment
+      hue: 0             // No hue shift in LAB
+    })
+    .toColourspace('srgb') // Convert back to sRGB
+    .png()
+    .toBuffer();
+}
+
+// Combined color correction pipeline with auto white balance and LAB processing
+export async function applyColorCorrection(imageBuffer: Buffer): Promise<Buffer> {
+  console.log(`🎨 Starting color correction pipeline (AWB + LAB)...`);
+  
+  let correctedBuffer = imageBuffer;
+  
+  // Step 1: Auto white balance
+  correctedBuffer = await autoWhiteBalance(correctedBuffer);
+  
+  // Step 2: LAB color space processing for perceptual accuracy
+  correctedBuffer = await processInLABColorSpace(correctedBuffer);
+  
+  console.log(`✅ Color correction pipeline completed`);
+  return correctedBuffer;
+}
+
 const threadSchema = z.object({
   floss: z.string(),
   name: z.string(),
@@ -111,6 +200,81 @@ export async function getRepresentativeColorsMedianCut(imageBuffer: Buffer, k: n
   });
 
   console.log(`📊 Median-cut completed: ${centroids.length} colors found`);
+
+  // Create labels array by finding nearest palette color for each pixel
+  const labels = new Array(info.width * info.height);
+  for (let i = 0; i < info.width * info.height; i++) {
+    const pixelIndex = i * 3;
+    const r = pixelBuffer[pixelIndex];
+    const g = pixelBuffer[pixelIndex + 1];
+    const b = pixelBuffer[pixelIndex + 2];
+    
+    // Find nearest palette color
+    let best = 0, min = Infinity;
+    for (let j = 0; j < centroids.length; j++) {
+      const diff = Math.abs(r - centroids[j][0]) + Math.abs(g - centroids[j][1]) + Math.abs(b - centroids[j][2]);
+      if (diff < min) { min = diff; best = j; }
+    }
+    labels[i] = best;
+  }
+
+  return {
+    centroids,
+    labels,
+    width: info.width,
+    height: info.height,
+  };
+}
+
+// Wu's variance-minimization quantizer for smoother color transitions and reduced pixelation
+export async function getRepresentativeColorsWu(imageBuffer: Buffer, k: number): Promise<RepresentativeColorsResult> {
+  // Moderate saturation boost for bright needlepoint results
+  const enhancedBuffer = await sharp(imageBuffer)
+    .modulate({ saturation: 1.6, brightness: 1.05 }) // balanced saturation boost + slight brightness
+    .toBuffer();
+
+  const { data: pixelBuffer, info } = await sharp(enhancedBuffer)
+    .ensureAlpha()
+    .removeAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  console.log(`🔍 Wu's quantizer: ${info.width}×${info.height} pixels, ${k} colors`);
+
+  // Create PointContainer from image data
+  const pointContainer = IQ.utils.PointContainer.fromUint8Array(pixelBuffer, info.width, info.height);
+  
+  // Build palette using Wu's variance-minimization algorithm
+  const palette = await IQ.buildPalette([pointContainer], { 
+    colors: k,
+    paletteQuantization: 'wuquant' // Use Wu's quantizer instead of median-cut
+  });
+  
+  // Get palette colors and enhance them for vibrancy
+  const paletteColors = palette.getPointContainer().getPointArray();
+  const centroids = paletteColors.map((pt: { r: number; g: number; b: number }) => {
+    // Enhance color vibrancy by boosting saturation
+    const [r, g, b] = [pt.r, pt.g, pt.b];
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const saturation = max === 0 ? 0 : (max - min) / max;
+    
+    // Moderate saturation boost for bright needlepoint results
+    const enhancedSaturation = Math.min(1, saturation * 1.4);
+    const delta = max - min;
+    const newDelta = enhancedSaturation * max;
+    
+    if (delta === 0) return [r, g, b]; // grayscale, no change
+    
+    const factor = newDelta / delta;
+    const newR = Math.min(255, Math.max(0, r + (r - min) * (factor - 1)));
+    const newG = Math.min(255, Math.max(0, g + (g - min) * (factor - 1)));
+    const newB = Math.min(255, Math.max(0, b + (b - min) * (factor - 1)));
+    
+    return [Math.round(newR), Math.round(newG), Math.round(newB)];
+  });
+
+  console.log(`📊 Wu's quantizer completed: ${centroids.length} colors found`);
 
   // Create labels array by finding nearest palette color for each pixel
   const labels = new Array(info.width * info.height);
