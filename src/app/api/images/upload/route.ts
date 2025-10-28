@@ -6,7 +6,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import sharp from "sharp";
-import { getRepresentativeColors, getRepresentativeColorsMedianCut, getThreadPalette, mapColorsToThreads, buildSegmentedManufacturerImage, buildDitheredManufacturerImage, applyEnhancedAntiAliasing } from "@/lib/colors";
+import { getRepresentativeColors, getRepresentativeColorsMedianCut, getRepresentativeColorsWu, getThreadPalette, mapColorsToThreads, buildSegmentedManufacturerImage, buildDitheredManufacturerImage, applyEnhancedAntiAliasing, applyColorCorrection } from "@/lib/colors";
 
 export async function POST(request: Request): Promise<NextResponse> {
   const body = (await request.json()) as HandleUploadBody;
@@ -107,7 +107,7 @@ export async function POST(request: Request): Promise<NextResponse> {
           const targetHeightInStitches = Math.round(canvasHeightInches * mesh);
 
           // Resize using high-quality downsampling with moderate saturation boost for bright needlepoint
-          const reducedPngBuffer = await sharp(imageBuffer)
+          const resizedBuffer = await sharp(imageBuffer)
             .resize(targetWidthInStitches, targetHeightInStitches, {
               kernel: sharp.kernel.lanczos3,
               fit: "fill", // ensure exact pixel grid without cropping
@@ -117,18 +117,21 @@ export async function POST(request: Request): Promise<NextResponse> {
             .png()
             .toBuffer();
 
-          // Upload reduced image to Blob storage (public)
+          // Apply color correction (auto white balance + LAB processing)
+          const correctedBuffer = await applyColorCorrection(resizedBuffer);
+
+          // Upload corrected image to Blob storage (public)
           const reducedBlobName = `reduced/${projectId}-${Date.now()}.png`;
-          const reducedBlob = await put(reducedBlobName, reducedPngBuffer, {
+          const reducedBlob = await put(reducedBlobName, correctedBuffer, {
             access: "public",
             contentType: "image/png",
           });
 
-          // Use median-cut palette quantization for better color fidelity and shape preservation
+          // Use Wu's quantizer for smoother color transitions and reduced pixelation
           console.log(`🖼️  Processing image: ${targetWidthInStitches}×${targetHeightInStitches} stitches, ${colors} colors`);
           
-          const { centroids, labels, width: reducedW, height: reducedH } = await getRepresentativeColorsMedianCut(
-            reducedPngBuffer,
+          const { centroids, labels, width: reducedW, height: reducedH } = await getRepresentativeColorsWu(
+            correctedBuffer,
             colors
           );
           const palette = await getThreadPalette();
@@ -136,7 +139,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
           // Build manufacturer image using dithered approach for smoother results
           console.log(`🎨 Building dithered manufacturer image: ${reducedW}×${reducedH} pixels`);
-          let manufacturerPngBuffer = await buildDitheredManufacturerImage(reducedPngBuffer, mapped);
+          let manufacturerPngBuffer = await buildDitheredManufacturerImage(correctedBuffer, mapped);
           
           // Enhanced anti-aliasing post-processing for smoother transitions
           manufacturerPngBuffer = await applyEnhancedAntiAliasing(manufacturerPngBuffer);
