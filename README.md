@@ -6,12 +6,8 @@ First, run the development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+ngrok http 3000
+# then paste the link into .env.local as VERCEL_BLOB_CALLBACK_URL
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
