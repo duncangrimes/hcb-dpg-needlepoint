@@ -19,14 +19,12 @@ export function ImageUploader({ projectId, onUploaded }: ImageUploaderProps) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [meshCount, setMeshCount] = useState<number>(13);
-  const [widthInput, setWidthInput] = useState<string>("8");
-  const [numColorsInput, setNumColorsInput] = useState<string>("12");
+  const [width, setWidth] = useState<number>(8);
+  const [numColors, setNumColors] = useState<number>(12);
   const widthSchema = z.number().min(6).max(14);
-  const parsedWidth = widthInput === "" ? undefined : Number(widthInput);
-  const isValidWidth = parsedWidth !== undefined && widthSchema.safeParse(parsedWidth).success;
-  const numColorsSchema = z.number().min(3).max(30);
-  const parsedNumColors = numColorsInput === "" ? undefined : Number(numColorsInput);
-  const isValidNumColors = parsedNumColors !== undefined && numColorsSchema.safeParse(parsedNumColors).success;
+  const isValidWidth = widthSchema.safeParse(width).success;
+  const numColorsSchema = z.number().min(4).max(30);
+  const isValidNumColors = numColorsSchema.safeParse(numColors).success;
 
   useEffect(() => {
     return () => {
@@ -50,7 +48,7 @@ export function ImageUploader({ projectId, onUploaded }: ImageUploaderProps) {
           const blob = await upload(file.name, file, {
             access: "public",
             handleUploadUrl: "/api/images/upload",
-            clientPayload: JSON.stringify({ projectId, meshCount, width: parsedWidth, numColors: parsedNumColors }),
+            clientPayload: JSON.stringify({ projectId, meshCount, width, numColors }),
           });
           
           // Wait a moment for the server processing to complete
@@ -162,18 +160,19 @@ export function ImageUploader({ projectId, onUploaded }: ImageUploaderProps) {
           <div className="mt-2">
             <input
               id="canvas-width"
-              type="number"
+              type="range"
               min={6}
               max={14}
               step={0.5}
-              value={widthInput}
-              onChange={(e) => {
-                // Allow empty string while typing/clearing
-                setWidthInput(e.target.value);
-              }}
-              className="block w-32 rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-900 shadow-xs placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-600 dark:border-white/10 dark:bg-white/5 dark:text-white"
+              value={width}
+              onChange={(e) => setWidth(Number(e.target.value))}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
             />
-            <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">6 to 14 inches.</p>
+            <div className="flex justify-between text-xs text-gray-600 dark:text-gray-400 mt-1">
+              <span>6 in</span>
+              <span className="font-bold">{width} in</span>
+              <span>14 in</span>
+            </div>
           </div>
         </div>
 
@@ -182,17 +181,19 @@ export function ImageUploader({ projectId, onUploaded }: ImageUploaderProps) {
           <div className="mt-2">
             <input
               id="num-colors"
-              type="number"
-              min={3}
+              type="range"
+              min={4}
               max={30}
-              step={1}
-              value={numColorsInput}
-              onChange={(e) => {
-                setNumColorsInput(e.target.value);
-              }}
-              className="block w-32 rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-900 shadow-xs placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-600 dark:border-white/10 dark:bg-white/5 dark:text-white"
+              step={2}
+              value={numColors}
+              onChange={(e) => setNumColors(Number(e.target.value))}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
             />
-            <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">Between 3 and 30 colors.</p>
+            <div className="flex justify-between text-xs text-gray-600 dark:text-gray-400 mt-1">
+              <span>4</span>
+              <span className="font-bold">{numColors}</span>
+              <span>30</span>
+            </div>
           </div>
         </div>
 
@@ -215,7 +216,7 @@ export function ImageUploader({ projectId, onUploaded }: ImageUploaderProps) {
           <span className="text-sm text-red-600 dark:text-red-400">Width must be between 6 and 14 inches</span>
         )}
         {!isValidNumColors && (
-          <span className="text-sm text-red-600 dark:text-red-400">Colors must be between 3 and 30</span>
+          <span className="text-sm text-red-600 dark:text-red-400">Colors must be between 4 and 30</span>
         )}
         {error && <span className="text-sm text-red-600 dark:text-red-400">{error}</span>}
       </div>
