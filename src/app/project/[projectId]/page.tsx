@@ -42,12 +42,12 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
           </div>
         ) : (
           <div className="mt-6 flex flex-col gap-4">
-            {project.canvases.map((canvas: { id: string; originalImage: string; reducedImage: string | null; manufacturerImage: string | null; meshCount: number; width: number; numColors: number }) => (
+            {project.canvases.map((canvas: { id: string; originalImage: string; manufacturerImage: string | null; meshCount: number; width: number; numColors: number }) => (
               <CanvasDisplay
                 key={canvas.id}
+                id={canvas.id}
                 title={project.title}
                 originalImage={canvas.originalImage}
-                reducedImage={canvas.reducedImage}
                 manufacturerImage={canvas.manufacturerImage}
                 meshCount={canvas.meshCount}
                 width={canvas.width}

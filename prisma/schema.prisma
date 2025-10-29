@@ -81,10 +81,6 @@ model Canvas {
 
   // The original uploaded image before conversion
   originalImage      String
-  // The reduced image for the preview
-  reducedImage       String?
-  // The display version that looks like a stitched canvas for users
-  displayImage       String?
   // The manufacturer-ready output
   manufacturerImage  String?
 }
