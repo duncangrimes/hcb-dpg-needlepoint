@@ -98,7 +98,7 @@ model Image {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@id([canvasId, type, source, projectId, userId])
+  @@id([canvasId, type])
   @@map("images")
 }
 
