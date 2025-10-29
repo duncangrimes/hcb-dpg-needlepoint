@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import sharp from "sharp";
 import { getRepresentativeColors, getRepresentativeColorsMedianCut, getRepresentativeColorsWu, getThreadPalette, mapColorsToThreads, buildSegmentedManufacturerImage, buildDitheredManufacturerImage, applyEnhancedAntiAliasing, applyColorCorrection } from "@/lib/colors";
+import { createCanvas } from "@/actions/createCanvas";
 
 export async function POST(request: Request): Promise<NextResponse> {
   const body = (await request.json()) as HandleUploadBody;
@@ -46,7 +47,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
         return {
           allowedContentTypes: ["image/jpeg", "image/png", "image/webp"],
-          addRandomSuffix: false, // We'll handle the path structure ourselves
+          addRandomSuffix: true, // Enable random suffix to prevent conflicts
           tokenPayload: JSON.stringify({
             userId,
             projectId,
@@ -139,20 +140,9 @@ export async function POST(request: Request): Promise<NextResponse> {
           // Enhanced anti-aliasing post-processing for smoother transitions
           manufacturerPngBuffer = await applyEnhancedAntiAliasing(manufacturerPngBuffer);
 
-          // Create Canvas row first to get the canvas ID
-          const canvas = await prisma.canvas.create({
-            data: {
-              projectId,
-              originalImage: "", // Will be updated after blob creation
-              manufacturerImage: null, // Will be updated after blob creation
-              meshCount: mesh,
-              width: w,
-              numColors: colors,
-            },
-          });
-
-          // Create folder structure: project-{projectId}/canvas-{canvasId}/
-          const folderPath = `project-${projectId}/canvas-${canvas.id}`;
+          // Create folder structure: project-{projectId}/canvas-{timestamp}/
+          const timestamp = Date.now();
+          const folderPath = `project-${projectId}/canvas-${timestamp}`;
           
           // Move the original image to the new folder structure
           const originalBlobName = `${folderPath}/original.png`;
@@ -168,13 +158,15 @@ export async function POST(request: Request): Promise<NextResponse> {
             contentType: "image/png",
           });
 
-          // Update the canvas with the correct image URLs
-          await prisma.canvas.update({
-            where: { id: canvas.id },
-            data: {
-              originalImage: originalBlob.url,
-              manufacturerImage: manufacturerBlob.url,
-            },
+          // Create the canvas using our new action
+          const canvas = await createCanvas({
+            projectId,
+            userId,
+            meshCount: mesh,
+            width: w,
+            numColors: colors,
+            originalImageUrl: originalBlob.url,
+            manufacturerImageUrl: manufacturerBlob.url,
           });
 
           // Clean up the temporary blob that was uploaded initially

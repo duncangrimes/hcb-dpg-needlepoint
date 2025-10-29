@@ -74,6 +74,9 @@ model Canvas {
   project            Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   projectId          String
 
+  // Canvas metadata
+  name               String
+
   // Canvas configuration
   meshCount          Int
   width              Float
