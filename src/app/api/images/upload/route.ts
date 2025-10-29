@@ -1,7 +1,7 @@
 // app/api/upload/route.ts (or wherever your API route is)
 import { NextResponse } from "next/server";
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
-import { put } from "@vercel/blob";
+import { put, del } from "@vercel/blob";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
@@ -46,7 +46,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
         return {
           allowedContentTypes: ["image/jpeg", "image/png", "image/webp"],
-          addRandomSuffix: true,
+          addRandomSuffix: false, // We'll handle the path structure ourselves
           tokenPayload: JSON.stringify({
             userId,
             projectId,
@@ -120,12 +120,7 @@ export async function POST(request: Request): Promise<NextResponse> {
           // Apply color correction (auto white balance + LAB processing)
           const correctedBuffer = await applyColorCorrection(resizedBuffer);
 
-          // Upload corrected image to Blob storage (public)
-          const reducedBlobName = `reduced/${projectId}-${Date.now()}.png`;
-          const reducedBlob = await put(reducedBlobName, correctedBuffer, {
-            access: "public",
-            contentType: "image/png",
-          });
+          // Note: correctedBuffer is used for processing but not stored separately
 
           // Use Wu's quantizer for smoother color transitions and reduced pixelation
           console.log(`🖼️  Processing image: ${targetWidthInStitches}×${targetHeightInStitches} stitches, ${colors} colors`);
@@ -143,26 +138,54 @@ export async function POST(request: Request): Promise<NextResponse> {
           
           // Enhanced anti-aliasing post-processing for smoother transitions
           manufacturerPngBuffer = await applyEnhancedAntiAliasing(manufacturerPngBuffer);
-          const manufacturerBlobName = `manufacturer/${projectId}-${Date.now()}.png`;
-          const manufacturerBlob = await put(manufacturerBlobName, manufacturerPngBuffer, {
-            access: "public",
-            contentType: "image/png",
-          });
-          console.log(`✅ Upload complete: original=${blob.url}, reduced=${reducedBlob.url}, manufacturer=${manufacturerBlob.url}`);
 
-          // Create Canvas row with images persisted
-          await prisma.canvas.create({
+          // Create Canvas row first to get the canvas ID
+          const canvas = await prisma.canvas.create({
             data: {
               projectId,
-              originalImage: blob.url,
-              reducedImage: reducedBlob.url,
-              displayImage: reducedBlob.url,
-              manufacturerImage: manufacturerBlob.url,
+              originalImage: "", // Will be updated after blob creation
+              manufacturerImage: null, // Will be updated after blob creation
               meshCount: mesh,
               width: w,
               numColors: colors,
             },
           });
+
+          // Create folder structure: project-{projectId}/canvas-{canvasId}/
+          const folderPath = `project-${projectId}/canvas-${canvas.id}`;
+          
+          // Move the original image to the new folder structure
+          const originalBlobName = `${folderPath}/original.png`;
+          const originalBlob = await put(originalBlobName, imageBuffer, {
+            access: "public",
+            contentType: "image/png",
+          });
+          
+          // Upload manufacturer image to the new folder structure
+          const manufacturerBlobName = `${folderPath}/manufacturer.png`;
+          const manufacturerBlob = await put(manufacturerBlobName, manufacturerPngBuffer, {
+            access: "public",
+            contentType: "image/png",
+          });
+
+          // Update the canvas with the correct image URLs
+          await prisma.canvas.update({
+            where: { id: canvas.id },
+            data: {
+              originalImage: originalBlob.url,
+              manufacturerImage: manufacturerBlob.url,
+            },
+          });
+
+          // Clean up the temporary blob that was uploaded initially
+          try {
+            await del(blob.url);
+            console.log(`🗑️  Cleaned up temporary blob: ${blob.url}`);
+          } catch (error) {
+            console.warn(`Failed to clean up temporary blob: ${blob.url}`, error);
+          }
+
+          console.log(`✅ Upload complete: original=${originalBlob.url}, manufacturer=${manufacturerBlob.url}`);
 
           revalidatePath(`/project/${projectId}`);
         } catch (error) {
