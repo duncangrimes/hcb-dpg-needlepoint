@@ -1,3 +1,5 @@
+"use client";
+
 import Image from "next/image";
 import { DeleteCanvasButton } from "@/components/project/delete-canvas-button";
 
@@ -9,11 +11,20 @@ type CanvasDisplayProps = {
   meshCount?: number | null;
   width?: number | null;
   numColors?: number | null;
+  isSelected?: boolean;
+  onSelect?: () => void;
 };
 
-export function CanvasDisplay({ id, name, originalImage, manufacturerImage, meshCount, width, numColors }: CanvasDisplayProps) {
+export function CanvasDisplay({ id, name, originalImage, manufacturerImage, meshCount, width, numColors, isSelected = false, onSelect }: CanvasDisplayProps) {
   return (
-    <div className="w-full rounded-lg outline -outline-offset-1 outline-gray-200 dark:outline-white/10 overflow-hidden bg-white dark:bg-gray-800">
+    <div 
+      className={`w-full rounded-lg outline -outline-offset-1 overflow-hidden bg-white dark:bg-gray-800 cursor-pointer transition-all duration-200 ${
+        isSelected 
+          ? "outline-blue-500 outline-4" 
+          : "outline-gray-200 dark:outline-white/10 hover:outline-gray-300 dark:hover:outline-white/20"
+      }`}
+      onClick={onSelect}
+    >
       <div className="px-4 py-3 border-b border-gray-200 dark:border-white/10">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{name}</h3>
       </div>
