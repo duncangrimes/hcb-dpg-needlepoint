@@ -9,12 +9,13 @@ import { useRouter } from "next/navigation";
 type ImageUploaderProps = {
   projectId: string;
   onUploaded?: (blob: PutBlobResult) => void;
+  onProcessingChange?: (isProcessing: boolean) => void;
 };
 
-export function ImageUploader({ projectId, onUploaded }: ImageUploaderProps) {
+export function ImageUploader({ projectId, onUploaded, onProcessingChange }: ImageUploaderProps) {
   const router = useRouter();
   const inputFileRef = useRef<HTMLInputElement>(null);
-  const [isUploading, setIsUploading] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -43,8 +44,10 @@ export function ImageUploader({ projectId, onUploaded }: ImageUploaderProps) {
         }
         const file = selectedFile;
         try {
-          setIsUploading(true);
+          setIsProcessing(true); // Show processing spinner immediately
+          onProcessingChange?.(true); // Notify parent component
           setError(null);
+          
           const blob = await upload(file.name, file, {
             access: "public",
             handleUploadUrl: "/api/images/upload",
@@ -52,7 +55,7 @@ export function ImageUploader({ projectId, onUploaded }: ImageUploaderProps) {
           });
           
           // Wait a moment for the server processing to complete
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          await new Promise(resolve => setTimeout(resolve, 2000));
           
           onUploaded?.(blob);
           
@@ -66,7 +69,8 @@ export function ImageUploader({ projectId, onUploaded }: ImageUploaderProps) {
         } catch (e) {
           setError((e as Error).message);
         } finally {
-          setIsUploading(false);
+          setIsProcessing(false);
+          onProcessingChange?.(false); // Notify parent component
         }
       }}
       className="w-full rounded-lg border border-gray-200 p-4 bg-white dark:bg-gray-800 dark:border-white/10"
@@ -74,7 +78,11 @@ export function ImageUploader({ projectId, onUploaded }: ImageUploaderProps) {
       <div className="flex items-center justify-center w-full">
         <label
           htmlFor="dropzone-file"
-          className="flex flex-col items-center justify-center w-full h-64 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:hover:border-gray-500 dark:hover:bg-gray-600"
+          className={`flex flex-col items-center justify-center w-full h-64 border-2 border-gray-300 border-dashed rounded-lg bg-gray-50 dark:bg-gray-700 dark:border-gray-600 ${
+            isProcessing 
+              ? 'cursor-not-allowed opacity-50' 
+              : 'cursor-pointer hover:bg-gray-100 dark:hover:border-gray-500 dark:hover:bg-gray-600'
+          }`}
           onDragOver={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -82,6 +90,7 @@ export function ImageUploader({ projectId, onUploaded }: ImageUploaderProps) {
           onDrop={(e) => {
             e.preventDefault();
             e.stopPropagation();
+            if (isProcessing) return;
             setError(null);
             if (previewUrl) URL.revokeObjectURL(previewUrl);
             const file = e.dataTransfer.files?.[0];
@@ -117,6 +126,7 @@ export function ImageUploader({ projectId, onUploaded }: ImageUploaderProps) {
             accept="image/*"
             className="hidden"
             onChange={(e) => {
+              if (isProcessing) return;
               setError(null);
               if (previewUrl) URL.revokeObjectURL(previewUrl);
               const file = e.target.files?.[0] ?? null;
@@ -144,7 +154,8 @@ export function ImageUploader({ projectId, onUploaded }: ImageUploaderProps) {
                   name="mesh-count"
                   type="radio"
                   checked={meshCount === count}
-                  onChange={() => setMeshCount(count)}
+                  onChange={() => !isProcessing && setMeshCount(count)}
+                  disabled={isProcessing}
                   className="relative size-4 appearance-none rounded-full border border-gray-300 bg-white before:absolute before:inset-1 before:rounded-full before:bg-white not-checked:before:hidden checked:border-indigo-600 checked:bg-indigo-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:border-gray-300 disabled:bg-gray-100 disabled:before:bg-gray-400 dark:border-white/10 dark:bg-white/5 dark:checked:border-indigo-500 dark:checked:bg-indigo-500 dark:focus-visible:outline-indigo-500 dark:disabled:border-white/5 dark:disabled:bg-white/10 dark:disabled:before:bg-white/20 forced-colors:appearance-auto forced-colors:before:hidden"
                 />
                 <label htmlFor={`mesh-${count}`} className="ml-3 block text-sm/6 font-medium text-gray-900 dark:text-white">
@@ -165,7 +176,8 @@ export function ImageUploader({ projectId, onUploaded }: ImageUploaderProps) {
               max={14}
               step={0.5}
               value={width}
-              onChange={(e) => setWidth(Number(e.target.value))}
+              onChange={(e) => !isProcessing && setWidth(Number(e.target.value))}
+              disabled={isProcessing}
               className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
             />
             <div className="flex justify-between text-xs text-gray-600 dark:text-gray-400 mt-1">
@@ -186,7 +198,8 @@ export function ImageUploader({ projectId, onUploaded }: ImageUploaderProps) {
               max={30}
               step={2}
               value={numColors}
-              onChange={(e) => setNumColors(Number(e.target.value))}
+              onChange={(e) => !isProcessing && setNumColors(Number(e.target.value))}
+              disabled={isProcessing}
               className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
             />
             <div className="flex justify-between text-xs text-gray-600 dark:text-gray-400 mt-1">
@@ -201,10 +214,10 @@ export function ImageUploader({ projectId, onUploaded }: ImageUploaderProps) {
         <div className="md:ml-auto">
           <button
             type="submit"
-            disabled={isUploading || !isValidWidth || !isValidNumColors || !selectedFile}
+            disabled={isProcessing || !isValidWidth || !isValidNumColors || !selectedFile}
             className="inline-flex items-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-xs hover:bg-indigo-500 disabled:bg-indigo-400 dark:bg-indigo-500 dark:hover:bg-indigo-400"
           >
-            {isUploading ? "Uploading..." : "Upload"}
+            Upload
           </button>
         </div>
       </div>

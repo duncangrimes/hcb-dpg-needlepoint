@@ -6,14 +6,13 @@ import { useState } from "react";
 
 export function ProjectImageUploader({ projectId }: { projectId: string }) {
   const router = useRouter();
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   
   return (
     <div className="relative">
       <ImageUploader
         projectId={projectId}
         onUploaded={async () => {
-          setIsRefreshing(true);
           try {
             // Multiple refresh attempts to ensure the server state is updated
             router.refresh();
@@ -21,12 +20,13 @@ export function ProjectImageUploader({ projectId }: { projectId: string }) {
             router.refresh();
             await new Promise(resolve => setTimeout(resolve, 1000));
             router.refresh();
-          } finally {
-            setIsRefreshing(false);
+          } catch (error) {
+            console.error("Error refreshing:", error);
           }
         }}
+        onProcessingChange={setIsProcessing}
       />
-      {isRefreshing && (
+      {isProcessing && (
         <div className="absolute inset-0 bg-white/80 dark:bg-gray-800/80 flex items-center justify-center rounded-lg">
           <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
             <div className="animate-spin h-4 w-4 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
