@@ -1,6 +1,4 @@
 import { prisma } from "@/lib/prisma";
-import { ProjectImageUploader } from "../../../components/project/uploader-client";
-import { SelectedCanvasDisplay } from "../../../components/project/selected-canvas-display";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { unstable_noStore as noStore } from "next/cache";
