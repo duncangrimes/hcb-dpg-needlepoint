@@ -1,45 +1,39 @@
 import { prisma } from "@/lib/prisma";
-import { auth } from "@/lib/auth";
-import { redirect } from "next/navigation";
-import { unstable_noStore as noStore } from "next/cache";
-import { ProjectPageClient } from "./ProjectPageClient";
+import ProjectChatClient from "@/components/project/chat/project-chat-client";
+import { notFound } from "next/navigation";
 
-export default async function ProjectPage({ params }: { params: Promise<{ projectId: string }> }) {
-  noStore();
-  const session = await auth();
-  if (!session?.user?.id) {
-    redirect("/");
-  }
-
+export default async function ProjectPage({
+  params,
+}: {
+  params: Promise<{ projectId: string }>;
+}) {
   const { projectId } = await params;
   const project = await prisma.project.findUnique({
     where: { id: projectId },
-    include: { 
-      canvases: { 
-        orderBy: { createdAt: "desc" },
-        include: {
-          images: {
-            orderBy: { createdAt: "desc" }
-          }
-        }
-      } 
+    select: { id: true, name: true },
+  });
+  if (!project) return notFound();
+
+  const canvases = await prisma.canvas.findMany({
+    where: { projectId: project.id },
+    orderBy: { createdAt: "asc" },
+    select: {
+      id: true,
+      meshCount: true,
+      width: true,
+      numColors: true,
+      images: { select: { id: true, url: true, type: true } },
     },
   });
 
-  if (!project) {
-    return (
-      <div className="p-8 text-center text-gray-500 dark:text-gray-400">Project not found.</div>
-    );
-  }
-
-  if (project.userId !== session.user.id) {
-    redirect("/dashboard");
-  }
-
-  const projectForClient = {
-    ...project,
-    name: project.name,
-  } satisfies Parameters<typeof ProjectPageClient>[0]["project"];
-
-  return <ProjectPageClient project={projectForClient} />;
+  return (
+    <div className="mx-auto max-w-5xl px-4 py-8">
+      <h1 className="text-2xl font-semibold text-gray-900 dark:text-white mb-6">
+        {project.name}
+      </h1>
+      <ProjectChatClient projectId={project.id} initialCanvases={canvases} />
+    </div>
+  );
 }
+
+

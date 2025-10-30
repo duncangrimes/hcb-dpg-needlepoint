@@ -65,5 +65,12 @@ export function validateRequiredParams(params: UploadParams): void {
   if (!params.projectId) {
     throw new Error("Missing projectId");
   }
+  if (
+    params.meshCount === undefined ||
+    params.width === undefined ||
+    params.numColors === undefined
+  ) {
+    throw new Error("Missing required canvas configuration");
+  }
 }
 
