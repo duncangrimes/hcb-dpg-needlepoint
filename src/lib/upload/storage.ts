@@ -41,39 +41,39 @@ export async function uploadImageBuffer(
 }
 
 /**
- * Uploads the original and manufacturer images to blob storage
+ * Uploads the raw (user) image and processed canvas image to blob storage
  * @param projectId The project ID
- * @param originalBuffer The original image buffer
- * @param manufacturerBuffer The manufacturer image buffer
+ * @param rawBuffer The original raw image buffer
+ * @param canvasBuffer The processed canvas image buffer
  * @param timestamp Optional timestamp for folder naming
  * @returns URLs for both uploaded images
  */
 export async function uploadCanvasImages(
   projectId: string,
-  originalBuffer: Buffer,
-  manufacturerBuffer: Buffer,
+  rawBuffer: Buffer,
+  canvasBuffer: Buffer,
   timestamp?: number
 ): Promise<{
-  originalUrl: string;
-  manufacturerUrl: string;
+  rawUrl: string;
+  canvasUrl: string;
 }> {
   const folderPath = generateCanvasFolderPath(projectId, timestamp);
 
-  // Upload original image
-  const originalBlob = await uploadImageBuffer(
-    originalBuffer,
-    `${folderPath}/original.png`
+  // Upload raw image
+  const rawBlob = await uploadImageBuffer(
+    rawBuffer,
+    `${folderPath}/raw.png`
   );
 
-  // Upload manufacturer image
-  const manufacturerBlob = await uploadImageBuffer(
-    manufacturerBuffer,
-    `${folderPath}/manufacturer.png`
+  // Upload processed canvas image
+  const canvasBlob = await uploadImageBuffer(
+    canvasBuffer,
+    `${folderPath}/canvas.png`
   );
 
   return {
-    originalUrl: originalBlob.url,
-    manufacturerUrl: manufacturerBlob.url,
+    rawUrl: rawBlob.url,
+    canvasUrl: canvasBlob.url,
   };
 }
 

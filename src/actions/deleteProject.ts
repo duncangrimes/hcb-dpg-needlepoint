@@ -17,11 +17,10 @@ export async function deleteProject(projectId: string): Promise<{ success: boole
       select: { 
         id: true, 
         userId: true,
-        canvases: {
+        images: {
           select: {
             id: true,
-            originalImage: true,
-            manufacturerImage: true,
+            url: true,
           },
         },
       },
@@ -37,30 +36,25 @@ export async function deleteProject(projectId: string): Promise<{ success: boole
 
     console.log(`Deleting project ${projectId} by user ${session.user.id}`);
 
-    // Delete all blob storage files for canvases in this project
-    for (const canvas of project.canvases) {
+    // Delete all blob storage files for images in this project
+    // Since images are project-scoped, we can delete all of them
+    for (const image of project.images) {
       try {
-        await del(canvas.originalImage);
-        console.log(`Deleted original image blob: ${canvas.originalImage}`);
+        await del(image.url);
+        console.log(`Deleted image blob: ${image.url}`);
       } catch (error) {
-        console.warn(`Failed to delete original image blob: ${canvas.originalImage}`, error);
-      }
-
-      if (canvas.manufacturerImage) {
-        try {
-          await del(canvas.manufacturerImage);
-          console.log(`Deleted manufacturer image blob: ${canvas.manufacturerImage}`);
-        } catch (error) {
-          console.warn(`Failed to delete manufacturer image blob: ${canvas.manufacturerImage}`, error);
-        }
+        console.warn(`Failed to delete image blob: ${image.url}`, error);
       }
     }
 
-    // Delete all canvases and the project from the database
-    await prisma.$transaction([
-      prisma.canvas.deleteMany({ where: { projectId } }),
-      prisma.project.delete({ where: { id: projectId } }),
-    ]);
+    // Delete project from database
+    // Cascade rules in schema will handle:
+    // - Canvases (onDelete: Cascade)
+    // - Images (onDelete: Cascade) 
+    // - Join table entries (automatic with Prisma)
+    await prisma.project.delete({ 
+      where: { id: projectId } 
+    });
 
     revalidatePath("/dashboard");
     return { success: true };

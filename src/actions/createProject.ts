@@ -23,7 +23,7 @@ export async function createProject(prevState: { message: string }, formData: Fo
 
   await prisma.project.create({
     data: {
-      title: validatedFields.data.name,
+      name: validatedFields.data.name,
       userId: session.user.id,
     },
   });

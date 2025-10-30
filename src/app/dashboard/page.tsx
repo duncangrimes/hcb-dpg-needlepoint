@@ -2,13 +2,14 @@
 
 import { createProject } from "@/actions/createProject";
 import { getProjects } from "@/actions/getProjects";
+import { getProjectsWithDisplayImage } from "@/actions/getProjectsWithDisplayImage";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useActionState, useState, useCallback } from "react";
 import { useFormStatus } from "react-dom";
 import { ProjectCard } from "@/components/dashboard/project-card";
 
-type ProjectWithImages = Awaited<ReturnType<typeof getProjects>>[number];
+type ProjectForDashboard = Awaited<ReturnType<typeof getProjectsWithDisplayImage>>[number];
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -28,14 +29,14 @@ export default function DashboardPage() {
   const { status } = useSession();
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
-  const [projects, setProjects] = useState<ProjectWithImages[]>([]);
+  const [projects, setProjects] = useState<ProjectForDashboard[]>([]);
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
 
   const [state, formAction] = useActionState(createProject, { message: "" });
 
   const fetchProjects = useCallback(async () => {
     setIsLoadingProjects(true);
-    const userProjects = await getProjects({});
+    const userProjects = await getProjectsWithDisplayImage();
     setProjects(userProjects);
     setIsLoadingProjects(false);
   }, []);
@@ -100,8 +101,8 @@ export default function DashboardPage() {
               <ProjectCard
                 key={project.id}
                 id={project.id}
-                title={project.title}
-                imageUrl={project.canvases[0]?.originalImage}
+                name={project.name}
+                imageUrl={project.displayImageUrl}
                 onDeleted={fetchProjects}
               />
             ))}

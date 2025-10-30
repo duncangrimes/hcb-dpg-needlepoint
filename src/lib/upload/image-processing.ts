@@ -6,6 +6,7 @@ import {
   buildDitheredManufacturerImage,
   applyEnhancedAntiAliasing,
   applyColorCorrection,
+  type Thread,
 } from "@/lib/colors";
 
 export interface ImageMetadata {
@@ -15,7 +16,8 @@ export interface ImageMetadata {
 }
 
 export interface ProcessedImageResult {
-  manufacturerImageBuffer: Buffer;
+  canvasImageBuffer: Buffer;
+  threads: Thread[];
   dimensions: {
     widthInStitches: number;
     heightInStitches: number;
@@ -118,6 +120,13 @@ export async function processImageForManufacturing(
   const palette = await getThreadPalette();
   const mapped = mapColorsToThreads(centroids, palette);
 
+  const uniqueThreads = mapped.reduce<Thread[]>((acc, { thread }) => {
+    if (!acc.some((item) => item.floss === thread.floss)) {
+      acc.push(thread);
+    }
+    return acc;
+  }, []);
+
   // Build manufacturer image using dithered approach for smoother results
   console.log(
     `🎨 Building dithered manufacturer image: ${reducedW}×${reducedH} pixels`
@@ -131,7 +140,8 @@ export async function processImageForManufacturing(
   manufacturerPngBuffer = await applyEnhancedAntiAliasing(manufacturerPngBuffer);
 
   return {
-    manufacturerImageBuffer: manufacturerPngBuffer,
+    canvasImageBuffer: manufacturerPngBuffer,
+    threads: uniqueThreads,
     dimensions: {
       widthInStitches: reducedW,
       heightInStitches: reducedH,

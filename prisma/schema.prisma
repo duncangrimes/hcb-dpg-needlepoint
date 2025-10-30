@@ -7,6 +7,16 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum ImageType {
+  CANVAS
+  RAW
+}
+
+enum ImageSource {
+  USER_UPLOAD
+  AI_GENERATED
+}
+
 model Account {
   id                 String  @id @default(cuid())
   userId             String  @map("user_id")
@@ -45,8 +55,11 @@ model User {
   image         String?
   accounts      Account[]
   sessions      Session[]
-  projects      Project[]
- 
+  projects         Project[]
+  canvases      Canvas[]
+  images        Image[]
+
+  createdAt DateTime @default(now())
   @@map("users")
 }
  
@@ -60,29 +73,52 @@ model VerificationToken {
 }
 
 model Project {
-  id        String   @id @default(cuid())
-  title     String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId    String
-  canvases  Canvas[]
+  id                 String @id @default(cuid())
+  user               User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId             String
+  name               String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  images             Image[]
+  canvases           Canvas[]
+}
+
+model Image {
+  id String @id @default(cuid())
+  url String
+
+  canvases Canvas[]
+  type     ImageType
+  source   ImageSource
+  project     Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId   String
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("images")
 }
 
 
 model Canvas {
-  id                 String @id @default(cuid())
-  project            Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  projectId          String
+  id String @id @default(cuid())
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId String
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  images Image[]
 
-  // Canvas metadata
-  name               String
+  meshCount Int
+  width Float
+  numColors Int
 
-  // Canvas configuration
-  meshCount          Int
-  width              Float
-  numColors          Int
+  threads String[]
 
-  // The original uploaded image before conversion
-  originalImage      String
-  // The manufacturer-ready output
-  manufacturerImage  String?
+  name String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@map("canvases")
 }
