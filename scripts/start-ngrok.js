@@ -4,6 +4,7 @@ const { spawn, exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const { promisify } = require('util');
+const net = require('net');
 
 const execAsync = promisify(exec);
 
@@ -61,7 +62,11 @@ async function start() {
   // Small delay to ensure processes are fully terminated
   await new Promise(resolve => setTimeout(resolve, 500));
 
-  // Start ngrok tunnel
+  // Wait for Next.js dev server to be ready on port 3000
+  console.log('⏳ Waiting for Next.js to be ready on http://localhost:3000 ...');
+  await waitForPort({ port: 3000, host: '127.0.0.1', timeoutMs: 120000 });
+
+  // Start ngrok tunnel once Next.js is ready
   console.log('🚀 Starting ngrok tunnel on port 3000...');
   const ngrok = spawn('ngrok', ['http', '3000', '--log=stdout'], {
     stdio: ['pipe', 'pipe', 'pipe']
@@ -90,25 +95,16 @@ async function start() {
     console.log(`Ngrok process exited with code ${code}`);
   });
 
-  // Start Next.js dev server
-  console.log('🚀 Starting Next.js development server...');
-  const nextDev = spawn('npm', ['run', 'dev'], {
-    stdio: 'inherit',
-    shell: true
-  });
-
   // Handle cleanup on exit
   process.on('SIGINT', () => {
     console.log('\n🛑 Shutting down...');
     ngrok.kill();
-    nextDev.kill();
     process.exit(0);
   });
 
   process.on('SIGTERM', () => {
     console.log('\n🛑 Shutting down...');
     ngrok.kill();
-    nextDev.kill();
     process.exit(0);
   });
 }
@@ -118,3 +114,33 @@ start().catch((error) => {
   console.error('❌ Error starting application:', error);
   process.exit(1);
 });
+
+// Utilities
+async function waitForPort({ port, host = '127.0.0.1', timeoutMs = 60000, intervalMs = 500 }) {
+  const startTime = Date.now();
+
+  return new Promise((resolve, reject) => {
+    const tryConnect = () => {
+      const socket = new net.Socket();
+      socket.setTimeout(2000);
+
+      const onError = () => {
+        socket.destroy();
+        if (Date.now() - startTime > timeoutMs) {
+          reject(new Error(`Timeout waiting for ${host}:${port}`));
+        } else {
+          setTimeout(tryConnect, intervalMs);
+        }
+      };
+
+      socket.once('error', onError);
+      socket.once('timeout', onError);
+      socket.connect(port, host, () => {
+        socket.end();
+        resolve(true);
+      });
+    };
+
+    tryConnect();
+  });
+}
