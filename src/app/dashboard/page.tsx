@@ -100,7 +100,7 @@ export default function DashboardPage() {
               <ProjectCard
                 key={project.id}
                 id={project.id}
-                title={project.title}
+                name={project.name}
                 imageUrl={project.canvases[0]?.originalImage}
                 onDeleted={fetchProjects}
               />

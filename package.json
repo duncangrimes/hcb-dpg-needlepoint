@@ -8,7 +8,13 @@
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "prisma": "node scripts/prisma-with-env.js",
+    "db:migrate": "node scripts/prisma-with-env.js migrate dev",
+    "db:push": "node scripts/prisma-with-env.js db push",
+    "db:studio": "node scripts/prisma-with-env.js studio",
+    "db:seed": "node scripts/prisma-with-env.js db seed",
+    "db:reset": "node scripts/prisma-with-env.js migrate reset"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.10.0",

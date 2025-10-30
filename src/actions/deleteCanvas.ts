@@ -18,7 +18,13 @@ export async function deleteCanvas(canvasId: string): Promise<void> {
       id: true,
       images: {
         select: {
+          id: true,
           url: true,
+          canvases: {
+            select: {
+              id: true,
+            },
+          },
         },
       },
       project: {
@@ -40,22 +46,41 @@ export async function deleteCanvas(canvasId: string): Promise<void> {
 
   console.log(`Deleting canvas ${canvasId} by user ${session.user.id}`);
 
-  // Delete the blobs from Vercel blob storage
+  // Identify images that are only connected to this canvas
+  // These should be deleted from storage and database
+  const imagesToDelete = canvas.images.filter(
+    (image) => image.canvases.length === 1 && image.canvases[0].id === canvasId
+  );
+
+  // Delete blobs for images that won't be used by other canvases
   await Promise.all(
-    canvas.images.map(async (image) => {
+    imagesToDelete.map(async (image) => {
       try {
         await del(image.url);
-        console.log(`Deleted canvas image blob: ${image.url}`);
+        console.log(`Deleted image blob: ${image.url}`);
       } catch (error) {
-        console.warn(`Failed to delete canvas image blob: ${image.url}`, error);
+        console.warn(`Failed to delete image blob: ${image.url}`, error);
       }
     })
   );
 
   // Delete the canvas from the database
+  // This disconnects it from shared images automatically via the join table
   await prisma.canvas.delete({
     where: { id: canvasId },
   });
+
+  // Delete orphaned images (images that are no longer connected to any canvas)
+  if (imagesToDelete.length > 0) {
+    await prisma.image.deleteMany({
+      where: {
+        id: {
+          in: imagesToDelete.map((img) => img.id),
+        },
+      },
+    });
+    console.log(`Deleted ${imagesToDelete.length} orphaned images`);
+  }
 
   revalidatePath(`/project/${canvas.project.id}`);
 }

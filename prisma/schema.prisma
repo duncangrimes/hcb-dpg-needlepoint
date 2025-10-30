@@ -85,10 +85,10 @@ model Project {
 }
 
 model Image {
+  id String @id @default(cuid())
   url String
 
-  canvas Canvas @relation(fields: [canvasId], references: [id], onDelete: Cascade)
-  canvasId String
+  canvases Canvas[]
   type     ImageType
   source   ImageSource
   project     Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -98,7 +98,6 @@ model Image {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@id([canvasId, type])
   @@map("images")
 }
 
@@ -116,6 +115,8 @@ model Canvas {
   numColors Int
 
   threads String[]
+
+  name String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

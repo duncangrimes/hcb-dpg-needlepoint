@@ -24,10 +24,13 @@ export async function getProjects({ page = 1, limit = 12 }: { page?: number, lim
         include: {
           canvases: {
               take: 1,
+              orderBy: {
+                  createdAt: 'desc',
+              },
           },
         },
         orderBy: {
-            title: 'asc',
+            name: 'asc',
         },
         // For actual pagination in the future:
         // take: limit,

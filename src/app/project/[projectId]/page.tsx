@@ -14,7 +14,16 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
   const { projectId } = await params;
   const project = await prisma.project.findUnique({
     where: { id: projectId },
-    include: { canvases: { orderBy: { id: "desc" } } },
+    include: { 
+      canvases: { 
+        orderBy: { createdAt: "desc" },
+        include: {
+          images: {
+            orderBy: { createdAt: "desc" }
+          }
+        }
+      } 
+    },
   });
 
   if (!project) {
@@ -27,5 +36,10 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
     redirect("/dashboard");
   }
 
-  return <ProjectPageClient project={project} />;
+  const projectForClient = {
+    ...project,
+    name: project.name,
+  } satisfies Parameters<typeof ProjectPageClient>[0]["project"];
+
+  return <ProjectPageClient project={projectForClient} />;
 }
