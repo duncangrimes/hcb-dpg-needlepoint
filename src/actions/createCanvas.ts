@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import type { Thread } from "@/lib/colors";
+import { ImageSource, ImageType } from "@prisma/client";
 
 export interface CreateCanvasParams {
   projectId: string;
@@ -46,8 +47,8 @@ export async function createCanvas(params: CreateCanvasParams) {
         create: [
           {
             url: params.rawImageUrl,
-            type: "RAW",
-            source: "USER_UPLOAD",
+            type: ImageType.RAW,
+            source: ImageSource.USER_UPLOAD,
             project: {
               connect: { id: params.projectId },
             },
@@ -57,8 +58,8 @@ export async function createCanvas(params: CreateCanvasParams) {
           },
           {
             url: params.canvasImageUrl,
-            type: "CANVAS",
-            source: "AI_GENERATED",
+            type: ImageType.CANVAS,
+            source: ImageSource.AI_GENERATED,
             project: {
               connect: { id: params.projectId },
             },

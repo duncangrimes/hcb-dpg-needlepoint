@@ -20,6 +20,40 @@ export function generateCanvasFolderPath(
 }
 
 /**
+ * Returns the canonical folder path for a canvas under a user's project
+ * Layout: /{userId}/{projectId}/{canvasId}/
+ */
+export function getCanvasFolderPath(
+  userId: string,
+  projectId: string,
+  canvasId: string
+): string {
+  return `${userId}/${projectId}/${canvasId}`;
+}
+
+/**
+ * Returns the canonical path for the RAW image: /{userId}/{projectId}/{canvasId}/raw.png
+ */
+export function getRawImagePath(
+  userId: string,
+  projectId: string,
+  canvasId: string
+): string {
+  return `${getCanvasFolderPath(userId, projectId, canvasId)}/raw.png`;
+}
+
+/**
+ * Returns the canonical path for the CANVAS image: /{userId}/{projectId}/{canvasId}/canvas.png
+ */
+export function getCanvasImagePath(
+  userId: string,
+  projectId: string,
+  canvasId: string
+): string {
+  return `${getCanvasFolderPath(userId, projectId, canvasId)}/canvas.png`;
+}
+
+/**
  * Uploads an image buffer to blob storage
  * @param buffer The image buffer to upload
  * @param path The full path including filename for the blob

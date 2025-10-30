@@ -10,7 +10,22 @@ import {
   validateAndNormalizeConfig,
   ALLOWED_CONTENT_TYPES,
 } from "@/lib/upload/config";
-import { processUpload } from "@/lib/upload/orchestration";
+import { prisma } from "@/lib/prisma";
+import {
+  getCanvasImagePath,
+  getRawImagePath,
+  uploadImageBuffer,
+} from "@/lib/upload/storage";
+import {
+  extractImageMetadata,
+  calculateStitchDimensions,
+  resizeImageForNeedlepoint,
+  processImageForManufacturing,
+  downloadImageBuffer,
+} from "@/lib/upload/image-processing";
+import { applyColorCorrection } from "@/lib/colors";
+import { ImageSource, ImageType } from "@prisma/client";
+import { revalidatePath } from "next/cache";
 
 export async function POST(request: Request): Promise<NextResponse> {
   const body = (await request.json()) as HandleUploadBody;
@@ -20,28 +35,44 @@ export async function POST(request: Request): Promise<NextResponse> {
       body,
       request,
       onBeforeGenerateToken: async (_pathname, clientPayload) => {
-        // Validate authentication
+        // 1) Auth and ownership
         const userId = await validateAuthentication();
-
-        // Parse and validate upload parameters
         const params = parseUploadParams(clientPayload);
         validateRequiredParams(params);
-
-        // Validate project ownership
         await validateProjectOwnership(params.projectId!, userId);
 
-        // Normalize config for token payload (preserve original values)
-        const config = validateAndNormalizeConfig(params);
+        // 2) Normalize and persist Canvas immediately (confirm-first)
+        const config = validateAndNormalizeConfig({
+          meshCount: params.meshCount,
+          width: params.width,
+          numColors: params.numColors,
+        });
+
+        const canvas = await prisma.canvas.create({
+          data: {
+            project: { connect: { id: params.projectId! } },
+            user: { connect: { id: userId } },
+            meshCount: config.meshCount,
+            width: config.width,
+            numColors: config.numColors,
+            threads: [],
+          },
+          select: { id: true, projectId: true },
+        });
+
+        const pathname = getRawImagePath(userId, canvas.projectId, canvas.id);
 
         return {
           allowedContentTypes: [...ALLOWED_CONTENT_TYPES],
-          addRandomSuffix: true, // Enable random suffix to prevent conflicts
+          addRandomSuffix: true,
+          pathname,
           tokenPayload: JSON.stringify({
             userId,
             projectId: params.projectId,
-            meshCount: params.meshCount,
-            width: params.width,
-            numColors: params.numColors,
+            canvasId: canvas.id,
+            meshCount: config.meshCount,
+            width: config.width,
+            numColors: config.numColors,
           }),
         };
       },
@@ -51,34 +82,77 @@ export async function POST(request: Request): Promise<NextResponse> {
           const parsed = JSON.parse(tokenPayload ?? "{}") as {
             projectId?: string;
             userId?: string;
+            canvasId?: string;
             meshCount?: number;
             width?: number;
             numColors?: number;
           };
 
-          const { projectId, userId } = parsed;
-
-          if (!projectId || !userId) {
+          const { projectId, userId, canvasId } = parsed;
+          if (!projectId || !userId || !canvasId) {
             throw new Error("Missing identifiers in tokenPayload");
           }
 
-          // Double-check ownership before processing
           await validateProjectOwnership(projectId, userId);
 
-          // Validate and normalize configuration
-          const config = validateAndNormalizeConfig({
-            meshCount: parsed.meshCount,
-            width: parsed.width,
-            numColors: parsed.numColors,
+          // 1) Create RAW image record (already uploaded at deterministic path)
+          await prisma.image.create({
+            data: {
+              url: blob.url,
+              type: ImageType.RAW,
+              source: ImageSource.USER_UPLOAD,
+              canvas: { connect: { id: canvasId } },
+              project: { connect: { id: projectId } },
+              user: { connect: { id: userId } },
+            },
           });
 
-          // Process the upload through the complete pipeline
-          await processUpload({
-            blobUrl: blob.url,
-            projectId,
-            userId,
-            config,
+          // 2) Download RAW and process
+          const rawBuffer = await downloadImageBuffer(blob.url);
+          const metadata = await extractImageMetadata(rawBuffer);
+          const { width: widthInches, meshCount, numColors } = {
+            width: parsed.width!,
+            meshCount: parsed.meshCount!,
+            numColors: parsed.numColors!,
+          };
+          const { widthInStitches, heightInStitches } = calculateStitchDimensions(
+            widthInches,
+            meshCount,
+            metadata.aspectRatio
+          );
+          const resized = await resizeImageForNeedlepoint(
+            rawBuffer,
+            widthInStitches,
+            heightInStitches
+          );
+          const corrected = await applyColorCorrection(resized);
+          const { canvasImageBuffer, threads } = await processImageForManufacturing(
+            corrected,
+            numColors
+          );
+
+          // 3) Upload CANVAS image to same folder
+          const canvasPngPath = getCanvasImagePath(userId, projectId, canvasId);
+          const canvasBlob = await uploadImageBuffer(canvasImageBuffer, canvasPngPath);
+
+          // 4) Persist CANVAS image and update Canvas threads
+          await prisma.image.create({
+            data: {
+              url: canvasBlob.url,
+              type: ImageType.CANVAS,
+              source: ImageSource.AI_GENERATED,
+              canvas: { connect: { id: canvasId } },
+              project: { connect: { id: projectId } },
+              user: { connect: { id: userId } },
+            },
           });
+
+          await prisma.canvas.update({
+            where: { id: canvasId },
+            data: { threads: threads.map((t) => t.floss) },
+          });
+
+          revalidatePath(`/project/${projectId}`);
         } catch (error) {
           console.error("Error finalizing upload:", error);
           throw error;
