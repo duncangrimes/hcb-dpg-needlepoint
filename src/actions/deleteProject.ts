@@ -20,8 +20,11 @@ export async function deleteProject(projectId: string): Promise<{ success: boole
         canvases: {
           select: {
             id: true,
-            originalImage: true,
-            manufacturerImage: true,
+            images: {
+              select: {
+                url: true,
+              },
+            },
           },
         },
       },
@@ -39,19 +42,12 @@ export async function deleteProject(projectId: string): Promise<{ success: boole
 
     // Delete all blob storage files for canvases in this project
     for (const canvas of project.canvases) {
-      try {
-        await del(canvas.originalImage);
-        console.log(`Deleted original image blob: ${canvas.originalImage}`);
-      } catch (error) {
-        console.warn(`Failed to delete original image blob: ${canvas.originalImage}`, error);
-      }
-
-      if (canvas.manufacturerImage) {
+      for (const image of canvas.images) {
         try {
-          await del(canvas.manufacturerImage);
-          console.log(`Deleted manufacturer image blob: ${canvas.manufacturerImage}`);
+          await del(image.url);
+          console.log(`Deleted canvas image blob: ${image.url}`);
         } catch (error) {
-          console.warn(`Failed to delete manufacturer image blob: ${canvas.manufacturerImage}`, error);
+          console.warn(`Failed to delete canvas image blob: ${image.url}`, error);
         }
       }
     }

@@ -16,8 +16,11 @@ export async function deleteCanvas(canvasId: string): Promise<void> {
     where: { id: canvasId },
     select: {
       id: true,
-      originalImage: true,
-      manufacturerImage: true,
+      images: {
+        select: {
+          url: true,
+        },
+      },
       project: {
         select: {
           userId: true,
@@ -38,21 +41,16 @@ export async function deleteCanvas(canvasId: string): Promise<void> {
   console.log(`Deleting canvas ${canvasId} by user ${session.user.id}`);
 
   // Delete the blobs from Vercel blob storage
-  try {
-    await del(canvas.originalImage);
-    console.log(`Deleted original image blob: ${canvas.originalImage}`);
-  } catch (error) {
-    console.warn(`Failed to delete original image blob: ${canvas.originalImage}`, error);
-  }
-
-  if (canvas.manufacturerImage) {
-    try {
-      await del(canvas.manufacturerImage);
-      console.log(`Deleted manufacturer image blob: ${canvas.manufacturerImage}`);
-    } catch (error) {
-      console.warn(`Failed to delete manufacturer image blob: ${canvas.manufacturerImage}`, error);
-    }
-  }
+  await Promise.all(
+    canvas.images.map(async (image) => {
+      try {
+        await del(image.url);
+        console.log(`Deleted canvas image blob: ${image.url}`);
+      } catch (error) {
+        console.warn(`Failed to delete canvas image blob: ${image.url}`, error);
+      }
+    })
+  );
 
   // Delete the canvas from the database
   await prisma.canvas.delete({

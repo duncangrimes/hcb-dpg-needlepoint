@@ -1,21 +1,21 @@
 "use server";
 
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import type { Thread } from "@/lib/colors";
 
 export interface CreateCanvasParams {
   projectId: string;
-  userId: string; // Add userId parameter
+  userId: string; // Add userId paramenter
   meshCount: number;
   width: number;
   numColors: number;
-  originalImageUrl: string;
-  manufacturerImageUrl?: string;
+  rawImageUrl: string;
+  canvasImageUrl: string;
+  threads: Thread[];
 }
 
 export async function createCanvas(params: CreateCanvasParams) {
-  // Remove auth check since we're passing userId directly
   const { userId } = params;
 
   // Verify the user owns the project
@@ -28,23 +28,49 @@ export async function createCanvas(params: CreateCanvasParams) {
     throw new Error("Not authorized to create canvas for this project");
   }
 
-  // Get the count of existing canvases in this project to generate the next name
-  const canvasCount = await prisma.canvas.count({
-    where: { projectId: params.projectId },
-  });
+  const serializedThreads = params.threads.map((thread) => thread.floss);
 
-  const canvasName = `Canvas ${canvasCount + 1}`;
-
-  // Create the canvas
   const canvas = await prisma.canvas.create({
     data: {
-      projectId: params.projectId,
-      name: canvasName,
+      project: {
+        connect: { id: params.projectId },
+      },
+      user: {
+        connect: { id: userId },
+      },
       meshCount: params.meshCount,
       width: params.width,
       numColors: params.numColors,
-      originalImage: params.originalImageUrl,
-      manufacturerImage: params.manufacturerImageUrl || null,
+      threads: serializedThreads,
+      images: {
+        create: [
+          {
+            url: params.rawImageUrl,
+            type: "RAW",
+            source: "USER_UPLOAD",
+            project: {
+              connect: { id: params.projectId },
+            },
+            user: {
+              connect: { id: userId },
+            },
+          },
+          {
+            url: params.canvasImageUrl,
+            type: "CANVAS",
+            source: "AI_GENERATED",
+            project: {
+              connect: { id: params.projectId },
+            },
+            user: {
+              connect: { id: userId },
+            },
+          },
+        ],
+      },
+    },
+    include: {
+      images: true,
     },
   });
 
