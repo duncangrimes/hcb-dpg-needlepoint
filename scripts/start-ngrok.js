@@ -56,6 +56,15 @@ async function killAllNgrokProcesses() {
 
 // Main function to start everything
 async function start() {
+  // Pull latest env vars from Vercel into .env.local (non-interactive)
+  try {
+    console.log('⬇️  Pulling Vercel env to .env.local ...');
+    await execAsync('npx --yes vercel env pull .env.local');
+    console.log('✅ Pulled Vercel env');
+  } catch (error) {
+    console.warn('⚠️  Warning: Could not pull Vercel env:', error.stderr || error.message);
+  }
+
   // Kill existing ngrok processes first
   await killAllNgrokProcesses();
   
