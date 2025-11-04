@@ -13,7 +13,7 @@ export default function RawImageRow({ url, onLoaded }: { url: string; onLoaded?:
           height={800}
           sizes="(max-width: 768px) 90vw, 512px"
           className="w-full h-auto rounded-lg ring-1 ring-gray-200 dark:ring-white/10"
-          onLoadingComplete={() => onLoaded?.()}
+          onLoad={() => onLoaded?.()}
         />
       </div>
     </div>

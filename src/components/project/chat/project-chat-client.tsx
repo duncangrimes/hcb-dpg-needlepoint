@@ -7,6 +7,7 @@ import CanvasImageRow from "./CanvasImageRow";
 import PreviewBubble from "./PreviewBubble";
 import { useRouter } from "next/navigation";
 import ProjectToolbar from "./project-toolbar";
+import { getProjectCanvases } from "@/actions/getProjectCanvases";
 
 type ImageRecord = { id: string; url: string; type: "RAW" | "CANVAS" };
 type CanvasRecord = {
@@ -15,16 +16,25 @@ type CanvasRecord = {
   width: number;
   numColors: number;
   images: ImageRecord[];
+  createdAt?: Date;
 };
 
 export default function ProjectChatClient({
   projectId,
   initialCanvases,
+  hasMore: initialHasMore,
+  oldestCanvasCreatedAt: initialOldestCanvasCreatedAt,
 }: {
   projectId: string;
   initialCanvases: CanvasRecord[];
+  hasMore: boolean;
+  oldestCanvasCreatedAt: Date | null;
 }) {
   const router = useRouter();
+  const [canvases, setCanvases] = useState<CanvasRecord[]>(initialCanvases);
+  const [hasMore, setHasMore] = useState(initialHasMore);
+  const [oldestCanvasCreatedAt, setOldestCanvasCreatedAt] = useState<Date | null>(initialOldestCanvasCreatedAt);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [localPreview, setLocalPreview] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -55,12 +65,37 @@ export default function ProjectChatClient({
 
   const messages = useMemo(() => {
     // Group by canvas: RAW (right), CANVAS (left)
-    return initialCanvases.map((c) => {
+    return canvases.map((c) => {
       const raw = c.images.find((i) => i.type === "RAW");
       const canvas = c.images.find((i) => i.type === "CANVAS");
       return { canvasId: c.id, rawUrl: raw?.url, canvasUrl: canvas?.url };
     });
-  }, [initialCanvases]);
+  }, [canvases]);
+
+  const handleLoadMore = async () => {
+    if (!oldestCanvasCreatedAt || isLoadingMore || !hasMore) return;
+
+    setIsLoadingMore(true);
+    try {
+      const result = await getProjectCanvases(projectId, oldestCanvasCreatedAt);
+      
+      if (result.canvases.length > 0) {
+        // Prepend older canvases at the beginning (old images appear above new ones)
+        setCanvases(prev => [...result.canvases, ...prev]);
+        const newOldest = result.canvases[0].createdAt; // First in asc order is oldest
+        if (newOldest) {
+          setOldestCanvasCreatedAt(newOldest);
+        }
+        setHasMore(result.hasMore);
+      } else {
+        setHasMore(false);
+      }
+    } catch (error) {
+      console.error("Error loading more canvases:", error);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
 
   // Clear optimistic RAW only after we observe an increase in server RAW count
   const prevRawCountRef = useRef<number>(0);
@@ -186,6 +221,17 @@ export default function ProjectChatClient({
 
   return (
     <div className="relative">
+      {hasMore && (
+        <div className="w-full flex justify-center mb-4">
+          <button
+            onClick={handleLoadMore}
+            disabled={isLoadingMore}
+            className="px-4 py-2 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-md transition-colors"
+          >
+            {isLoadingMore ? "Loading..." : "Load More Images"}
+          </button>
+        </div>
+      )}
       <div className={localPreview ? "space-y-3 pb-28 sm:pb-18" : "space-y-3 pb-36 sm:pb-26"}>
         {messages.map((m) => (
           <div key={m.canvasId} className="space-y-3">
