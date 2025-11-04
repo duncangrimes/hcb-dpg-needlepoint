@@ -8,6 +8,7 @@ import PreviewBubble from "./PreviewBubble";
 import { useRouter } from "next/navigation";
 import ProjectToolbar from "./project-toolbar";
 import { getProjectCanvases } from "@/actions/getProjectCanvases";
+import { checkCanvasStatus } from "@/actions/checkCanvasStatus";
 
 type ImageRecord = { id: string; url: string; type: "RAW" | "CANVAS" };
 type CanvasRecord = {
@@ -41,8 +42,57 @@ export default function ProjectChatClient({
   const [meshCount, setMeshCount] = useState<number>(13);
   const [width, setWidth] = useState<number>(8);
   const [numColors, setNumColors] = useState<number>(12);
-  const [optimisticRaw, setOptimisticRaw] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  // Sync canvases state with server data when new canvases appear (for uploads)
+  // This effect runs when the server refreshes and provides new data
+  useEffect(() => {
+    setCanvases((prev) => {
+      const currentCanvasIds = new Set(prev.map((c) => c.id));
+      const newCanvases = initialCanvases.filter((c) => !currentCanvasIds.has(c.id));
+      
+      // Update existing canvases with latest data (in case images were added)
+      const updatedCanvases = prev.map((canvas) => {
+        const updated = initialCanvases.find((c) => c.id === canvas.id);
+        if (updated) {
+          // Only update if the server version has more images
+          // This prevents unnecessary re-renders when we've already updated locally
+          if (updated.images.length > canvas.images.length) {
+            return updated;
+          }
+          return canvas;
+        }
+        return canvas;
+      });
+      
+      // Merge new canvases with existing ones, maintaining order (oldest first for chat)
+      const merged = newCanvases.length > 0 
+        ? [...updatedCanvases, ...newCanvases]
+        : updatedCanvases;
+      
+      // Sort by createdAt if available, otherwise keep order
+      return merged.sort((a, b) => {
+        if (!a.createdAt || !b.createdAt) return 0;
+        return a.createdAt.getTime() - b.createdAt.getTime();
+      });
+    });
+    
+    setHasMore(initialHasMore);
+    // Only update oldestCanvasCreatedAt if we don't have one yet
+    if (!oldestCanvasCreatedAt && initialOldestCanvasCreatedAt) {
+      setOldestCanvasCreatedAt(initialOldestCanvasCreatedAt);
+    }
+    
+    // If we were processing and now we have canvases with RAW images, stop processing
+    if (isProcessing) {
+      const hasRawImages = initialCanvases.some((c) => 
+        c.images.some((img) => img.type === "RAW")
+      );
+      if (hasRawImages) {
+        setIsProcessing(false);
+      }
+    }
+  }, [initialCanvases, initialHasMore, initialOldestCanvasCreatedAt, oldestCanvasCreatedAt, isProcessing]);
   const [initialExpectedImages, setInitialExpectedImages] = useState<number>(0);
   const [initialLoadedImages, setInitialLoadedImages] = useState<number>(0);
   const didInitialScrollRef = useRef<boolean>(false);
@@ -97,20 +147,21 @@ export default function ProjectChatClient({
     }
   };
 
-  // Clear optimistic RAW only after we observe an increase in server RAW count
-  const prevRawCountRef = useRef<number>(0);
-  const rawCount = useMemo(() => messages.filter((m) => Boolean(m.rawUrl)).length, [messages]);
   const canvasCount = useMemo(() => messages.filter((m) => Boolean(m.canvasUrl)).length, [messages]);
   const hasPendingCanvas = useMemo(
     () => messages.some((m) => m.rawUrl && !m.canvasUrl),
     [messages]
   );
-  useEffect(() => {
-    if (rawCount > prevRawCountRef.current) {
-      setOptimisticRaw(null);
-    }
-    prevRawCountRef.current = rawCount;
-  }, [rawCount]);
+  
+  // Show spinner if we're uploading or if there are pending canvases
+  const showSpinner = isProcessing || hasPendingCanvas;
+  
+  // Get list of canvas IDs that are pending (have RAW but no CANVAS)
+  const pendingCanvasIds = useMemo(
+    () => messages.filter((m) => m.rawUrl && !m.canvasUrl).map((m) => m.canvasId),
+    [messages]
+  );
+  
 
   // On mount, start at the top, then after initial images load, scroll to bottom
   useLayoutEffect(() => {
@@ -165,7 +216,7 @@ export default function ProjectChatClient({
     prevCanvasCountRef.current = canvasCount;
   }, [canvasCount]);
 
-  // Scroll to bottom when a new preview is shown or optimistic RAW is added
+  // Scroll to bottom when a new preview is shown
   useEffect(() => {
     if (!didInitialScrollRef.current) return;
     if (localPreview) {
@@ -180,22 +231,53 @@ export default function ProjectChatClient({
       window.scrollTo({ top: maxHeight, behavior: "auto" });
     }
   }, [localPreview]);
-  useEffect(() => {
-    if (!didInitialScrollRef.current) return;
-    if (optimisticRaw) {
-      // Wait a tick for the DOM to update, then scroll to absolute bottom
-      setTimeout(() => scrollToAbsoluteBottom("smooth"), 100);
-    }
-  }, [optimisticRaw]);
 
-  // While a canvas is pending (or we have an optimistic RAW), poll for updates
+  // Poll for canvas completion when there are pending canvases
   useEffect(() => {
-    if (!hasPendingCanvas && !optimisticRaw) return;
-    const interval = setInterval(() => {
-      router.refresh();
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [hasPendingCanvas, optimisticRaw, router]);
+    if (pendingCanvasIds.length === 0 && !isProcessing) return;
+
+    const pollInterval = setInterval(async () => {
+      // If we're processing, check for new canvases first
+      if (isProcessing) {
+        // Refresh to see if the RAW image appeared
+        router.refresh();
+        return;
+      }
+      
+      // Check each pending canvas to see if CANVAS image is ready
+      for (const canvasId of pendingCanvasIds) {
+        const status = await checkCanvasStatus(canvasId);
+        
+        if (status?.hasCanvas && status.canvasUrl) {
+          // Canvas is ready, update the specific canvas in state
+          setCanvases((prev) =>
+            prev.map((canvas) => {
+              if (canvas.id === canvasId) {
+                // Check if CANVAS image already exists to avoid duplicates
+                const hasCanvasImage = canvas.images.some((img) => img.type === "CANVAS");
+                if (!hasCanvasImage) {
+                  return {
+                    ...canvas,
+                    images: [
+                      ...canvas.images,
+                      {
+                        id: `temp-${canvasId}-canvas`,
+                        url: status.canvasUrl!,
+                        type: "CANVAS" as const,
+                      },
+                    ],
+                  };
+                }
+              }
+              return canvas;
+            })
+          );
+        }
+      }
+    }, 1000); // Poll every second
+
+    return () => clearInterval(pollInterval);
+  }, [pendingCanvasIds, isProcessing, router]);
 
   async function handleConfirmConvert() {
     if (!selectedFile) return;
@@ -203,18 +285,25 @@ export default function ProjectChatClient({
     try {
       const file = selectedFile;
       if (localPreview) {
-        setOptimisticRaw(localPreview);
         URL.revokeObjectURL(localPreview);
       }
       setLocalPreview(null);
+      
       await upload(file.name, file, {
         access: "public",
         handleUploadUrl: "/api/images/upload",
         clientPayload: JSON.stringify({ projectId, meshCount, width, numColors }),
       });
+      
       setSelectedFile(null);
-      router.refresh();
-    } finally {
+      
+      // Refresh to get the RAW image (canvas is created immediately, RAW is created in onUploadCompleted)
+      // Wait a bit for the upload to complete server-side
+      setTimeout(() => {
+        router.refresh();
+      }, 1000);
+    } catch (error) {
+      console.error("Upload error:", error);
       setIsProcessing(false);
     }
   }
@@ -244,12 +333,6 @@ export default function ProjectChatClient({
           </div>
         ))}
 
-        {optimisticRaw && optimisticRaw.length > 0 && (
-          <div>
-            <RawImageRow url={optimisticRaw} />
-          </div>
-        )}
-
         {localPreview && (
           <PreviewBubble
             url={localPreview}
@@ -261,8 +344,8 @@ export default function ProjectChatClient({
           />
         )}
 
-        {((optimisticRaw && optimisticRaw.length > 0) || hasPendingCanvas) && (
-          <div className="w-full flex justify-center">
+        {showSpinner && (
+          <div className="w-full flex justify-center py-4">
             <div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-300 border-t-gray-700 dark:border-white/20 dark:border-t-white" aria-label="Processing canvas" />
           </div>
         )}
