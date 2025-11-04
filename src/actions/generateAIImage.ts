@@ -120,9 +120,11 @@ export async function generateAIImage(
             } else if (part.inlineData) {
               console.log("Found image data in inlineData");
               const imageData = part.inlineData.data;
-              generatedImageBuffer = Buffer.from(imageData, "base64");
-              console.log("Successfully extracted image buffer, size:", generatedImageBuffer.length, "bytes");
-              break; // Found the image, no need to continue
+              if (imageData) {
+                generatedImageBuffer = Buffer.from(imageData, "base64");
+                console.log("Successfully extracted image buffer, size:", generatedImageBuffer.length, "bytes");
+                break; // Found the image, no need to continue
+              }
             }
           }
         }
