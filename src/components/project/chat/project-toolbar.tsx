@@ -1,59 +1,96 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export default function ProjectToolbar({
   isProcessing,
   meshCount,
   width,
   numColors,
+  selectedCanvasId,
   onMeshCountChange,
   onWidthChange,
   onNumColorsChange,
   onPickFile,
   onConfirmConvert,
+  onSendPrompt,
 }: {
   isProcessing: boolean;
   meshCount: number;
   width: number;
   numColors: number;
+  selectedCanvasId: string | null;
   onMeshCountChange: (v: number) => void;
   onWidthChange: (v: number) => void;
   onNumColorsChange: (v: number) => void;
   onPickFile: (file: File | null, previewUrl: string | null) => void;
   onConfirmConvert: () => void;
+  onSendPrompt: (prompt: string) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const promptInputRef = useRef<HTMLInputElement>(null);
+  const [prompt, setPrompt] = useState("");
 
   useEffect(() => () => {
     if (inputRef.current) inputRef.current.value = "";
   }, []);
 
+  const handleSendPrompt = () => {
+    if (prompt.trim() && selectedCanvasId) {
+      onSendPrompt(prompt.trim());
+      setPrompt("");
+    }
+  };
+
+  const hasSelectedCanvas = selectedCanvasId !== null;
+
   return (
     <div className="fixed bottom-0 inset-x-0 border-t border-gray-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/60 dark:bg-gray-900/70 dark:border-white/10">
       <div className="mx-auto max-w-5xl px-4 py-3 flex flex-col md:flex-row gap-4 md:items-center">
-        <div className="flex items-center gap-4">
-          <button
-            type="button"
-            className="rounded-md px-3 py-2 text-sm font-medium bg-gray-100 hover:bg-gray-200 text-gray-900 dark:bg-white/10 dark:hover:bg-white/15 dark:text-white"
-            disabled={isProcessing}
-            onClick={() => inputRef.current?.click()}
-          >
-            Upload
-          </button>
-          <input
-            ref={inputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0] ?? null;
-              if (!file) return onPickFile(null, null);
-              const url = URL.createObjectURL(file);
-              onPickFile(file, url);
-            }}
-          />
-        </div>
+        {!hasSelectedCanvas && (
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              className="rounded-md px-3 py-2 text-sm font-medium bg-gray-100 hover:bg-gray-200 text-gray-900 dark:bg-white/10 dark:hover:bg-white/15 dark:text-white"
+              disabled={isProcessing}
+              onClick={() => inputRef.current?.click()}
+            >
+              Upload
+            </button>
+            <input
+              ref={inputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0] ?? null;
+                if (!file) return onPickFile(null, null);
+                const url = URL.createObjectURL(file);
+                onPickFile(file, url);
+              }}
+            />
+          </div>
+        )}
+
+        {hasSelectedCanvas && (
+          <div className="flex-1 flex items-center gap-2">
+            <input
+              ref={promptInputRef}
+              type="text"
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendPrompt();
+                }
+              }}
+              placeholder="Enter your prompt..."
+              className="flex-1 rounded-md px-3 py-2 text-sm border border-gray-300 dark:border-white/20 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              disabled={isProcessing}
+            />
+          </div>
+        )}
 
         <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4">
           <fieldset>
@@ -104,14 +141,25 @@ export default function ProjectToolbar({
         </div>
 
         <div className="md:ml-auto">
-          <button
-            type="button"
-            disabled={isProcessing}
-            onClick={onConfirmConvert}
-            className="inline-flex items-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-xs hover:bg-indigo-500 disabled:bg-indigo-400 dark:bg-indigo-500 dark:hover:bg-indigo-400"
-          >
-            {isProcessing ? "Converting..." : "Convert"}
-          </button>
+          {!hasSelectedCanvas ? (
+            <button
+              type="button"
+              disabled={isProcessing}
+              onClick={onConfirmConvert}
+              className="inline-flex items-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-xs hover:bg-indigo-500 disabled:bg-indigo-400 dark:bg-indigo-500 dark:hover:bg-indigo-400"
+            >
+              {isProcessing ? "Converting..." : "Convert"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={isProcessing || !prompt.trim()}
+              onClick={handleSendPrompt}
+              className="inline-flex items-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-xs hover:bg-indigo-500 disabled:bg-indigo-400 dark:bg-indigo-500 dark:hover:bg-indigo-400"
+            >
+              {isProcessing ? "Sending..." : "Send"}
+            </button>
+          )}
         </div>
       </div>
     </div>

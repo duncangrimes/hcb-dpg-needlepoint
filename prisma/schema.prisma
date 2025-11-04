@@ -129,6 +129,7 @@ model Canvas {
 }
 
 model Prompt {
+  text String
   originalImageId  String
   generatedImageId String
   canvas           Canvas   @relation(fields: [canvasId], references: [id], onDelete: Cascade)

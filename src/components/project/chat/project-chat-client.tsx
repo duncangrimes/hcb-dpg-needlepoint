@@ -9,6 +9,8 @@ import { useRouter } from "next/navigation";
 import ProjectToolbar from "./project-toolbar";
 import { getProjectCanvases } from "@/actions/getProjectCanvases";
 import { checkCanvasStatus } from "@/actions/checkCanvasStatus";
+import { generateAIImage } from "@/actions/generateAIImage";
+import { processGeneratedCanvas } from "@/actions/processGeneratedCanvas";
 
 type ImageRecord = { id: string; url: string; type: "RAW" | "CANVAS" };
 type CanvasRecord = {
@@ -42,6 +44,7 @@ export default function ProjectChatClient({
   const [meshCount, setMeshCount] = useState<number>(13);
   const [width, setWidth] = useState<number>(8);
   const [numColors, setNumColors] = useState<number>(12);
+  const [selectedCanvasId, setSelectedCanvasId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   // Sync canvases state with server data when new canvases appear (for uploads)
@@ -118,9 +121,19 @@ export default function ProjectChatClient({
     return canvases.map((c) => {
       const raw = c.images.find((i) => i.type === "RAW");
       const canvas = c.images.find((i) => i.type === "CANVAS");
-      return { canvasId: c.id, rawUrl: raw?.url, canvasUrl: canvas?.url };
+      return { 
+        canvasId: c.id, 
+        rawUrl: raw?.url, 
+        canvasUrl: canvas?.url,
+        rawImageId: raw?.id,
+        canvasImageId: canvas?.id,
+      };
     });
   }, [canvases]);
+
+  const handleCanvasClick = (canvasId: string) => {
+    setSelectedCanvasId((prev) => (prev === canvasId ? null : canvasId));
+  };
 
   const handleLoadMore = async () => {
     if (!oldestCanvasCreatedAt || isLoadingMore || !hasMore) return;
@@ -232,6 +245,9 @@ export default function ProjectChatClient({
     }
   }, [localPreview]);
 
+  // Track which canvases are being processed to avoid duplicate processing
+  const processingCanvasIdsRef = useRef<Set<string>>(new Set());
+
   // Poll for canvas completion when there are pending canvases
   useEffect(() => {
     if (pendingCanvasIds.length === 0 && !isProcessing) return;
@@ -247,6 +263,24 @@ export default function ProjectChatClient({
       // Check each pending canvas to see if CANVAS image is ready
       for (const canvasId of pendingCanvasIds) {
         const status = await checkCanvasStatus(canvasId);
+        
+        // If we have RAW but no CANVAS, check if this is an AI-generated canvas
+        // and trigger processing if not already processing
+        if (
+          status?.hasRaw &&
+          !status.hasCanvas &&
+          status.rawSource === "AI_GENERATED" &&
+          !processingCanvasIdsRef.current.has(canvasId)
+        ) {
+          // Mark as processing to avoid duplicate calls
+          processingCanvasIdsRef.current.add(canvasId);
+          
+          // Trigger processing asynchronously
+          processGeneratedCanvas(canvasId).catch((error) => {
+            console.error("Error processing canvas:", error);
+            processingCanvasIdsRef.current.delete(canvasId);
+          });
+        }
         
         if (status?.hasCanvas && status.canvasUrl) {
           // Canvas is ready, update the specific canvas in state
@@ -272,12 +306,15 @@ export default function ProjectChatClient({
               return canvas;
             })
           );
+          
+          // Remove from processing set once CANVAS is ready
+          processingCanvasIdsRef.current.delete(canvasId);
         }
       }
     }, 1000); // Poll every second
 
     return () => clearInterval(pollInterval);
-  }, [pendingCanvasIds, isProcessing, router]);
+  }, [pendingCanvasIds, isProcessing, router, canvases]);
 
   async function handleConfirmConvert() {
     if (!selectedFile) return;
@@ -322,16 +359,29 @@ export default function ProjectChatClient({
         </div>
       )}
       <div className={localPreview ? "space-y-3 pb-28 sm:pb-18" : "space-y-3 pb-36 sm:pb-26"}>
-        {messages.map((m) => (
-          <div key={m.canvasId} className="space-y-3">
-            {m.rawUrl && (
-              <RawImageRow url={m.rawUrl} onLoaded={() => setInitialLoadedImages((v) => v + 1)} />
-            )}
-            {m.canvasUrl && (
-              <CanvasImageRow url={m.canvasUrl} onLoaded={() => setInitialLoadedImages((v) => v + 1)} />
-            )}
-          </div>
-        ))}
+        {messages.map((m) => {
+          const isSelected = selectedCanvasId === m.canvasId;
+          return (
+            <div key={m.canvasId} className="space-y-3">
+              {m.rawUrl && (
+                <RawImageRow 
+                  url={m.rawUrl} 
+                  isSelected={isSelected}
+                  onClick={() => handleCanvasClick(m.canvasId)}
+                  onLoaded={() => setInitialLoadedImages((v) => v + 1)} 
+                />
+              )}
+              {m.canvasUrl && (
+                <CanvasImageRow 
+                  url={m.canvasUrl} 
+                  isSelected={isSelected}
+                  onClick={() => handleCanvasClick(m.canvasId)}
+                  onLoaded={() => setInitialLoadedImages((v) => v + 1)} 
+                />
+              )}
+            </div>
+          );
+        })}
 
         {localPreview && (
           <PreviewBubble
@@ -358,6 +408,7 @@ export default function ProjectChatClient({
         meshCount={meshCount}
         width={width}
         numColors={numColors}
+        selectedCanvasId={selectedCanvasId}
         onMeshCountChange={setMeshCount}
         onWidthChange={setWidth}
         onNumColorsChange={setNumColors}
@@ -369,6 +420,41 @@ export default function ProjectChatClient({
           setLocalPreview(previewUrl);
         }}
         onConfirmConvert={handleConfirmConvert}
+        onSendPrompt={async (prompt: string) => {
+          if (!selectedCanvasId) return;
+          
+          setIsProcessing(true);
+          try {
+            // Find the selected canvas to get its config
+            const selectedCanvas = canvases.find((c) => c.id === selectedCanvasId);
+            if (!selectedCanvas) {
+              console.error("Selected canvas not found");
+              return;
+            }
+
+            // Generate AI image
+            const result = await generateAIImage(selectedCanvasId, projectId, prompt);
+            
+            if (!result.success || !result.canvasId) {
+              console.error("Failed to generate AI image:", result.error);
+              alert(result.error || "Failed to generate image");
+              return;
+            }
+
+            // Clear selection
+            setSelectedCanvasId(null);
+
+            // Refresh to show the new RAW image
+            // Processing will be triggered automatically by the polling logic
+            // when it detects the RAW image without a CANVAS image
+            router.refresh();
+          } catch (error) {
+            console.error("Error generating AI image:", error);
+            alert("An error occurred while generating the image");
+          } finally {
+            setIsProcessing(false);
+          }
+        }}
       />
     </div>
   );

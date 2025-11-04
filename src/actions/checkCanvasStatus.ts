@@ -2,13 +2,14 @@
 
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { ImageType } from "@prisma/client";
+import { ImageType, ImageSource } from "@prisma/client";
 
 export interface CanvasStatus {
   hasRaw: boolean;
   hasCanvas: boolean;
   rawUrl?: string;
   canvasUrl?: string;
+  rawSource?: ImageSource;
 }
 
 /**
@@ -34,6 +35,7 @@ export async function checkCanvasStatus(
         select: {
           url: true,
           type: true,
+          source: true,
         },
       },
     },
@@ -51,5 +53,6 @@ export async function checkCanvasStatus(
     hasCanvas: !!canvasImg,
     rawUrl: raw?.url,
     canvasUrl: canvasImg?.url,
+    rawSource: raw?.source,
   };
 }
