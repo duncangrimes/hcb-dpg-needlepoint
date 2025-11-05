@@ -11,5 +11,5 @@ export async function loginWithEmail(formData: FormData) {
     throw new Error(result.error.issues[0].message);
   }
 
-  await signIn("resend", { email: result.data.email, redirectTo: "/" });
+  await signIn("resend", { email: result.data.email, redirectTo: "/dashboard" });
 }
