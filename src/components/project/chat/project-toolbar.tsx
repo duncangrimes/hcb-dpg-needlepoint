@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import RangeSlider from "./RangeSlider";
 
 export default function ProjectToolbar({
   isProcessing,
@@ -104,7 +105,7 @@ export default function ProjectToolbar({
                   handleSendPrompt();
                 }
               }}
-              placeholder="Enter your prompt... (Shift+Enter for new line)"
+              placeholder="Enter your prompt"
               rows={1}
               className="flex-1 rounded-md px-3 py-2 text-sm border border-gray-300 dark:border-white/20 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none overflow-hidden"
               style={{ minHeight: "40px", maxHeight: "200px" }}
@@ -132,33 +133,25 @@ export default function ProjectToolbar({
             </div>
           </fieldset>
 
-          <div>
-            <label className="block text-xs font-semibold text-gray-900 dark:text-white">Width (in) — {width}</label>
-            <input
-              type="range"
-              min={6}
-              max={14}
-              step={0.5}
-              value={width}
-              onChange={(e) => onWidthChange(Number(e.target.value))}
-              disabled={isProcessing}
-              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
-            />
-          </div>
+          <RangeSlider
+            label="Width (in)"
+            value={width}
+            min={6}
+            max={14}
+            step={0.5}
+            onChange={onWidthChange}
+            disabled={isProcessing}
+          />
 
-          <div>
-            <label className="block text-xs font-semibold text-gray-900 dark:text-white">Colors — {numColors}</label>
-            <input
-              type="range"
-              min={4}
-              max={30}
-              step={2}
-              value={numColors}
-              onChange={(e) => onNumColorsChange(Number(e.target.value))}
-              disabled={isProcessing}
-              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
-            />
-          </div>
+          <RangeSlider
+            label="Colors"
+            value={numColors}
+            min={4}
+            max={30}
+            step={2}
+            onChange={onNumColorsChange}
+            disabled={isProcessing}
+          />
         </div>
 
         <div className="md:ml-auto">
