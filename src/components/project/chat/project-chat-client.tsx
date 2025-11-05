@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { upload } from "@vercel/blob/client";
 import RawImageRow from "./RawImageRow";
 import CanvasImageRow from "./CanvasImageRow";
 import PreviewBubble from "./PreviewBubble";
@@ -11,6 +10,7 @@ import { getProjectCanvases } from "@/actions/getProjectCanvases";
 import { checkCanvasStatus } from "@/actions/checkCanvasStatus";
 import { generateAIImage } from "@/actions/generateAIImage";
 import { processGeneratedCanvas } from "@/actions/processGeneratedCanvas";
+import { uploadUserImage } from "@/actions/uploadUserImage";
 
 type ImageRecord = { id: string; url: string; type: "RAW" | "CANVAS" };
 type CanvasRecord = {
@@ -326,19 +326,29 @@ export default function ProjectChatClient({
       }
       setLocalPreview(null);
       
-      await upload(file.name, file, {
-        access: "public",
-        handleUploadUrl: "/api/images/upload",
-        clientPayload: JSON.stringify({ projectId, meshCount, width, numColors }),
-      });
+      // Create FormData with file and parameters
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("projectId", projectId);
+      formData.append("meshCount", meshCount.toString());
+      formData.append("width", width.toString());
+      formData.append("numColors", numColors.toString());
+      
+      // Call server action
+      const result = await uploadUserImage(formData);
+      
+      if (!result.success) {
+        console.error("Upload error:", result.error);
+        alert(result.error || "Failed to upload image");
+        setIsProcessing(false);
+        return;
+      }
       
       setSelectedFile(null);
       
-      // Refresh to get the RAW image (canvas is created immediately, RAW is created in onUploadCompleted)
-      // Wait a bit for the upload to complete server-side
-      setTimeout(() => {
-        router.refresh();
-      }, 1000);
+      // Refresh to get the RAW image (which is created immediately)
+      // The server action will handle revalidation, but we refresh to ensure UI updates
+      router.refresh();
     } catch (error) {
       console.error("Upload error:", error);
       setIsProcessing(false);
