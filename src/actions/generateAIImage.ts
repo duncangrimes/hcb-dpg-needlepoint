@@ -20,12 +20,18 @@ export interface GenerateAIImageResult {
  * @param canvasId - The selected canvas ID
  * @param projectId - The project ID
  * @param prompt - The user's prompt text
+ * @param meshCount - The mesh count to use for the new canvas
+ * @param width - The width to use for the new canvas
+ * @param numColors - The number of colors to use for the new canvas
  * @returns Result with new canvas ID or error
  */
 export async function generateAIImage(
   canvasId: string,
   projectId: string,
-  prompt: string
+  prompt: string,
+  meshCount: number,
+  width: number,
+  numColors: number
 ): Promise<GenerateAIImageResult> {
   try {
     // 1) Validate authentication and ownership
@@ -151,14 +157,14 @@ export async function generateAIImage(
       };
     }
 
-    // 5) Create new Canvas record with same config as original
+    // 5) Create new Canvas record with provided config values
     const newCanvas = await prisma.canvas.create({
       data: {
         project: { connect: { id: projectId } },
         user: { connect: { id: userId } },
-        meshCount: selectedCanvas.meshCount,
-        width: selectedCanvas.width,
-        numColors: selectedCanvas.numColors,
+        meshCount: meshCount,
+        width: width,
+        numColors: numColors,
         threads: [],
       },
       select: { id: true, projectId: true },

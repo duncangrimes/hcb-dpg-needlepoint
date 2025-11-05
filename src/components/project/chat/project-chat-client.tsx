@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import RawImageRow from "./RawImageRow";
 import CanvasImageRow from "./CanvasImageRow";
 import PreviewBubble from "./PreviewBubble";
@@ -21,6 +22,14 @@ type CanvasRecord = {
   images: ImageRecord[];
   createdAt?: Date;
 };
+
+enum ScrollTrigger {
+  NONE = "NONE",
+  INITIAL_LOAD = "INITIAL_LOAD",
+  LOAD_MORE = "LOAD_MORE",
+  NEW_CANVAS = "NEW_CANVAS",
+  PREVIEW = "PREVIEW",
+}
 
 export default function ProjectChatClient({
   projectId,
@@ -46,10 +55,15 @@ export default function ProjectChatClient({
   const [numColors, setNumColors] = useState<number>(12);
   const [selectedCanvasId, setSelectedCanvasId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const pendingGeneratedCanvasIdRef = useRef<string | null>(null);
+  const previousCanvasIdsRef = useRef<Set<string>>(new Set());
 
   // Sync canvases state with server data when new canvases appear (for uploads)
   // This effect runs when the server refreshes and provides new data
   useEffect(() => {
+    // Capture previous canvas IDs BEFORE updating state
+    const previousCanvasIds = new Set(canvases.map((c) => c.id));
+    
     setCanvases((prev) => {
       const currentCanvasIds = new Set(prev.map((c) => c.id));
       const newCanvases = initialCanvases.filter((c) => !currentCanvasIds.has(c.id));
@@ -74,10 +88,15 @@ export default function ProjectChatClient({
         : updatedCanvases;
       
       // Sort by createdAt if available, otherwise keep order
-      return merged.sort((a, b) => {
+      const sorted = merged.sort((a, b) => {
         if (!a.createdAt || !b.createdAt) return 0;
         return a.createdAt.getTime() - b.createdAt.getTime();
       });
+      
+      // Update the ref with the new canvas IDs for comparison in next render
+      previousCanvasIdsRef.current = new Set(sorted.map((c) => c.id));
+      
+      return sorted;
     });
     
     setHasMore(initialHasMore);
@@ -88,32 +107,74 @@ export default function ProjectChatClient({
     
     // If we were processing and now we have canvases with RAW images, stop processing
     if (isProcessing) {
-      const hasRawImages = initialCanvases.some((c) => 
-        c.images.some((img) => img.type === "RAW")
-      );
-      if (hasRawImages) {
-        setIsProcessing(false);
+      // If we're waiting for a specific generated canvas, check if it appeared
+      if (pendingGeneratedCanvasIdRef.current) {
+        const targetCanvas = initialCanvases.find(
+          (c) => c.id === pendingGeneratedCanvasIdRef.current
+        );
+        if (targetCanvas?.images.some((img) => img.type === "RAW")) {
+          setIsProcessing(false);
+          pendingGeneratedCanvasIdRef.current = null;
+        }
+      } else {
+        // For uploads, check if a NEW canvas with RAW images appeared
+        // Compare with previous canvas IDs (before this update) to only detect truly new canvases
+        const newCanvasWithRaw = initialCanvases.find((c) => 
+          !previousCanvasIds.has(c.id) && c.images.some((img) => img.type === "RAW")
+        );
+        if (newCanvasWithRaw) {
+          setIsProcessing(false);
+        }
       }
     }
   }, [initialCanvases, initialHasMore, initialOldestCanvasCreatedAt, oldestCanvasCreatedAt, isProcessing]);
-  const [initialExpectedImages, setInitialExpectedImages] = useState<number>(0);
-  const [initialLoadedImages, setInitialLoadedImages] = useState<number>(0);
-  const didInitialScrollRef = useRef<boolean>(false);
-  const scrollToAbsoluteBottom = (behavior: ScrollBehavior = "auto") => {
-    // Double tick to ensure layout is fully settled
+  
+  const hasInitialScrolledRef = useRef<boolean>(false);
+  
+  // Track scroll trigger to prevent conflicts
+  const scrollTriggerRef = useRef<ScrollTrigger>(ScrollTrigger.NONE);
+  
+  const scrollToTop = (behavior: ScrollBehavior = "smooth") => {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        const maxHeight = Math.max(
-          document.body.scrollHeight,
-          document.documentElement.scrollHeight,
-          document.body.offsetHeight,
-          document.documentElement.offsetHeight,
-          document.body.clientHeight,
-          document.documentElement.clientHeight
-        );
-        window.scrollTo({ top: maxHeight, behavior });
+        window.scrollTo({ top: 0, behavior });
       });
     });
+  };
+  
+  const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
+    // Scroll to absolute bottom - browsers will clamp to max scroll position
+    const maxScroll = Math.max(
+      document.body.scrollHeight,
+      document.documentElement.scrollHeight
+    );
+    
+    if (behavior === "auto") {
+      // Instant scroll - go to absolute bottom
+      window.scrollTo({ top: maxScroll, behavior: "auto" });
+    } else {
+      // Smooth scroll
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: maxScroll, behavior: "smooth" });
+      });
+    }
+  };
+
+  // Helper function to start processing action with scroll (assumes isProcessing is already set)
+  const startProcessingAction = async <T,>(action: () => Promise<T>): Promise<T> => {
+    // Scroll to bottom after spinner renders
+    requestAnimationFrame(() => {
+      scrollToBottom("auto");
+    });
+    
+    try {
+      const result = await action();
+      return result;
+    } catch (error) {
+      // Reset processing state on error
+      setIsProcessing(false);
+      throw error;
+    }
   };
 
   const messages = useMemo(() => {
@@ -131,14 +192,43 @@ export default function ProjectChatClient({
     });
   }, [canvases]);
 
+  // Get selected canvas to use its values for the toolbar
+  const selectedCanvas = useMemo(() => {
+    if (!selectedCanvasId) return null;
+    return canvases.find((c) => c.id === selectedCanvasId) || null;
+  }, [selectedCanvasId, canvases]);
+
+  // When a canvas is selected, sync state values to canvas values (as defaults)
+  // This allows users to modify them from the toolbar
+  useEffect(() => {
+    if (selectedCanvas) {
+      setMeshCount(selectedCanvas.meshCount);
+      setWidth(selectedCanvas.width);
+      setNumColors(selectedCanvas.numColors);
+    }
+  }, [selectedCanvas]);
+
   const handleCanvasClick = (canvasId: string) => {
     setSelectedCanvasId((prev) => (prev === canvasId ? null : canvasId));
+  };
+
+  const handleContainerClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Check if the click target is directly on an Image component
+    const target = e.target as HTMLElement;
+    const isImageClick = target.closest('[data-selectable-image]') !== null || target.tagName === 'IMG';
+    
+    // If clicking outside images, deselect
+    if (!isImageClick && selectedCanvasId) {
+      setSelectedCanvasId(null);
+    }
   };
 
   const handleLoadMore = async () => {
     if (!oldestCanvasCreatedAt || isLoadingMore || !hasMore) return;
 
     setIsLoadingMore(true);
+    scrollTriggerRef.current = ScrollTrigger.LOAD_MORE;
+    
     try {
       const result = await getProjectCanvases(projectId, oldestCanvasCreatedAt);
       
@@ -150,6 +240,9 @@ export default function ProjectChatClient({
           setOldestCanvasCreatedAt(newOldest);
         }
         setHasMore(result.hasMore);
+        
+        // Scroll to top after loading more (content appears at top)
+        scrollToTop("smooth");
       } else {
         setHasMore(false);
       }
@@ -157,10 +250,14 @@ export default function ProjectChatClient({
       console.error("Error loading more canvases:", error);
     } finally {
       setIsLoadingMore(false);
+      // Reset trigger after a delay to allow DOM update
+      setTimeout(() => {
+        scrollTriggerRef.current = ScrollTrigger.NONE;
+      }, 200);
     }
   };
 
-  const canvasCount = useMemo(() => messages.filter((m) => Boolean(m.canvasUrl)).length, [messages]);
+  const canvasCount = useMemo(() => messages.length, [messages]);
   const hasPendingCanvas = useMemo(
     () => messages.some((m) => m.rawUrl && !m.canvasUrl),
     [messages]
@@ -176,72 +273,48 @@ export default function ProjectChatClient({
   );
   
 
-  // On mount, start at the top, then after initial images load, scroll to bottom
+  // Initialize scroll state on mount
   useLayoutEffect(() => {
-    // Ensure we begin at the very top
+    // Start at the top
     window.scrollTo({ top: 0, behavior: "auto" });
+    scrollTriggerRef.current = ScrollTrigger.INITIAL_LOAD;
 
-    // Count how many images are expected on initial render
-    const expected = messages.reduce((acc, m) => acc + (m.rawUrl ? 1 : 0) + (m.canvasUrl ? 1 : 0), 0);
-    setInitialExpectedImages(expected);
-    setInitialLoadedImages(0);
+    // Scroll to bottom after a short delay to allow DOM to render
+    // Don't wait for all images to load - this causes significant delays
+    const timeoutId = setTimeout(() => {
+      if (scrollTriggerRef.current === ScrollTrigger.INITIAL_LOAD) {
+        scrollToBottom("smooth");
+        hasInitialScrolledRef.current = true;
+        scrollTriggerRef.current = ScrollTrigger.NONE;
+      }
+    }, 100); // Small delay to ensure DOM is ready
 
-    // If there are no images, consider initial load done immediately
-    if (expected === 0) {
-      didInitialScrollRef.current = true;
-      const maxHeight = Math.max(
-        document.body.scrollHeight,
-        document.documentElement.scrollHeight,
-        document.body.offsetHeight,
-        document.documentElement.offsetHeight,
-        document.body.clientHeight,
-        document.documentElement.clientHeight
-      );
-      window.scrollTo({ top: maxHeight, behavior: "smooth" });
-    }
+    return () => clearTimeout(timeoutId);
   }, []);
 
-  // When all initially expected images finish loading, scroll to very bottom once
-  useEffect(() => {
-    if (didInitialScrollRef.current) return;
-    if (initialExpectedImages === 0) return;
-    if (initialLoadedImages < initialExpectedImages) return;
-    const maxHeight = Math.max(
-      document.body.scrollHeight,
-      document.documentElement.scrollHeight,
-      document.body.offsetHeight,
-      document.documentElement.offsetHeight,
-      document.body.clientHeight,
-      document.documentElement.clientHeight
-    );
-    window.scrollTo({ top: maxHeight, behavior: "smooth" });
-    didInitialScrollRef.current = true;
-  }, [initialExpectedImages, initialLoadedImages]);
-
-  // Scroll to bottom when a new canvas appears
+  // Scroll to bottom when a new canvas appears (but not during load more)
   const prevCanvasCountRef = useRef<number>(0);
   useEffect(() => {
-    if (!didInitialScrollRef.current) return;
+    if (!hasInitialScrolledRef.current) return;
+    if (scrollTriggerRef.current === ScrollTrigger.LOAD_MORE) return; // Don't scroll during load more
     if (canvasCount > prevCanvasCountRef.current) {
-      // Wait a tick for the DOM to update, then scroll to absolute bottom
-      setTimeout(() => scrollToAbsoluteBottom("smooth"), 100);
+      scrollTriggerRef.current = ScrollTrigger.NEW_CANVAS;
+      // Use requestAnimationFrame instead of setTimeout for faster response
+      requestAnimationFrame(() => {
+        scrollToBottom("smooth");
+        scrollTriggerRef.current = ScrollTrigger.NONE;
+      });
     }
     prevCanvasCountRef.current = canvasCount;
   }, [canvasCount]);
 
   // Scroll to bottom when a new preview is shown
   useEffect(() => {
-    if (!didInitialScrollRef.current) return;
-    if (localPreview) {
-      const maxHeight = Math.max(
-        document.body.scrollHeight,
-        document.documentElement.scrollHeight,
-        document.body.offsetHeight,
-        document.documentElement.offsetHeight,
-        document.body.clientHeight,
-        document.documentElement.clientHeight
-      );
-      window.scrollTo({ top: maxHeight, behavior: "auto" });
+    if (!hasInitialScrolledRef.current) return;
+    if (localPreview && scrollTriggerRef.current !== ScrollTrigger.LOAD_MORE) {
+      scrollTriggerRef.current = ScrollTrigger.PREVIEW;
+      scrollToBottom("auto");
+      scrollTriggerRef.current = ScrollTrigger.NONE;
     }
   }, [localPreview]);
 
@@ -318,8 +391,23 @@ export default function ProjectChatClient({
 
   async function handleConfirmConvert() {
     if (!selectedFile) return;
-    setIsProcessing(true);
-    try {
+    
+    // Force immediate state update to show spinner - must happen synchronously before any async work
+    flushSync(() => {
+      setIsProcessing(true);
+    });
+    
+    // Wait for browser to paint the spinner before starting async work
+    // This ensures the spinner is visible before we block with file operations
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          resolve();
+        });
+      });
+    });
+    
+    await startProcessingAction(async () => {
       const file = selectedFile;
       if (localPreview) {
         URL.revokeObjectURL(localPreview);
@@ -349,10 +437,10 @@ export default function ProjectChatClient({
       // Refresh to get the RAW image (which is created immediately)
       // The server action will handle revalidation, but we refresh to ensure UI updates
       router.refresh();
-    } catch (error) {
+    }).catch((error) => {
       console.error("Upload error:", error);
-      setIsProcessing(false);
-    }
+      // Error handling is done in startProcessingAction
+    });
   }
 
   return (
@@ -368,7 +456,10 @@ export default function ProjectChatClient({
           </button>
         </div>
       )}
-      <div className={localPreview ? "space-y-3 pb-28 sm:pb-18" : "space-y-3 pb-36 sm:pb-26"}>
+      <div 
+        className={localPreview ? "space-y-3 pb-72 sm:pb-64" : "space-y-3 pb-80 sm:pb-72"}
+        onClick={handleContainerClick}
+      >
         {messages.map((m) => {
           const isSelected = selectedCanvasId === m.canvasId;
           return (
@@ -378,7 +469,6 @@ export default function ProjectChatClient({
                   url={m.rawUrl} 
                   isSelected={isSelected}
                   onClick={() => handleCanvasClick(m.canvasId)}
-                  onLoaded={() => setInitialLoadedImages((v) => v + 1)} 
                 />
               )}
               {m.canvasUrl && (
@@ -386,7 +476,6 @@ export default function ProjectChatClient({
                   url={m.canvasUrl} 
                   isSelected={isSelected}
                   onClick={() => handleCanvasClick(m.canvasId)}
-                  onLoaded={() => setInitialLoadedImages((v) => v + 1)} 
                 />
               )}
             </div>
@@ -409,9 +498,10 @@ export default function ProjectChatClient({
             <div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-300 border-t-gray-700 dark:border-white/20 dark:border-t-white" aria-label="Processing canvas" />
           </div>
         )}
-        {/* Minimal sentinel for scroll detection, no extra spacing */}
-        <div ref={bottomRef} className="h-0" />
       </div>
+      
+      {/* Sentinel at true bottom of page - positioned after padding to represent actual bottom */}
+      <div ref={bottomRef} className="h-1" />
 
       <ProjectToolbar
         isProcessing={isProcessing}
@@ -433,23 +523,51 @@ export default function ProjectChatClient({
         onSendPrompt={async (prompt: string) => {
           if (!selectedCanvasId) return;
           
-          setIsProcessing(true);
-          try {
+          // Force immediate state update to show spinner - must happen synchronously before any async work
+          flushSync(() => {
+            setIsProcessing(true);
+          });
+          
+          // Wait for browser to paint the spinner before starting async work
+          // This ensures the spinner is visible before we block with API calls
+          await new Promise<void>((resolve) => {
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                resolve();
+              });
+            });
+          });
+          
+          await startProcessingAction(async () => {
             // Find the selected canvas to get its config
             const selectedCanvas = canvases.find((c) => c.id === selectedCanvasId);
             if (!selectedCanvas) {
               console.error("Selected canvas not found");
+              setIsProcessing(false);
               return;
             }
 
-            // Generate AI image
-            const result = await generateAIImage(selectedCanvasId, projectId, prompt);
+            // Generate AI image (this awaits Gemini generation, spinner stays on)
+            // Use current state values (meshCount, width, numColors) instead of selected canvas values
+            const result = await generateAIImage(
+              selectedCanvasId,
+              projectId,
+              prompt,
+              meshCount,
+              width,
+              numColors
+            );
             
             if (!result.success || !result.canvasId) {
               console.error("Failed to generate AI image:", result.error);
               alert(result.error || "Failed to generate image");
+              setIsProcessing(false);
+              pendingGeneratedCanvasIdRef.current = null;
               return;
             }
+
+            // Track the canvas ID we're waiting for - spinner stays on until it appears
+            pendingGeneratedCanvasIdRef.current = result.canvasId;
 
             // Clear selection
             setSelectedCanvasId(null);
@@ -457,13 +575,14 @@ export default function ProjectChatClient({
             // Refresh to show the new RAW image
             // Processing will be triggered automatically by the polling logic
             // when it detects the RAW image without a CANVAS image
+            // The useEffect will set isProcessing to false when the RAW image appears
             router.refresh();
-          } catch (error) {
+          }).catch((error) => {
             console.error("Error generating AI image:", error);
             alert("An error occurred while generating the image");
-          } finally {
-            setIsProcessing(false);
-          }
+            pendingGeneratedCanvasIdRef.current = null;
+            // Error handling is done in startProcessingAction
+          });
         }}
       />
     </div>

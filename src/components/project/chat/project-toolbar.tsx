@@ -28,17 +28,36 @@ export default function ProjectToolbar({
   onSendPrompt: (prompt: string) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const promptInputRef = useRef<HTMLInputElement>(null);
+  const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
   const [prompt, setPrompt] = useState("");
 
   useEffect(() => () => {
     if (inputRef.current) inputRef.current.value = "";
   }, []);
 
+  // Auto-resize textarea based on content
+  useEffect(() => {
+    const textarea = promptTextareaRef.current;
+    if (textarea) {
+      // Reset height to auto to get the correct scrollHeight
+      textarea.style.height = "auto";
+      // Set height to scrollHeight, with min and max constraints
+      const maxHeight = 200; // Max height in pixels (about 5-6 lines)
+      const minHeight = 40; // Min height in pixels (single line)
+      const newHeight = Math.min(Math.max(textarea.scrollHeight, minHeight), maxHeight);
+      textarea.style.height = `${newHeight}px`;
+      textarea.style.overflowY = textarea.scrollHeight > maxHeight ? "auto" : "hidden";
+    }
+  }, [prompt]);
+
   const handleSendPrompt = () => {
     if (prompt.trim() && selectedCanvasId) {
       onSendPrompt(prompt.trim());
       setPrompt("");
+      // Reset textarea height after sending
+      if (promptTextareaRef.current) {
+        promptTextareaRef.current.style.height = "auto";
+      }
     }
   };
 
@@ -46,7 +65,7 @@ export default function ProjectToolbar({
 
   return (
     <div className="fixed bottom-0 inset-x-0 border-t border-gray-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/60 dark:bg-gray-900/70 dark:border-white/10">
-      <div className="mx-auto max-w-5xl px-4 py-3 flex flex-col md:flex-row gap-4 md:items-center">
+      <div className="mx-auto max-w-5xl px-4 py-3 flex flex-col md:flex-row gap-4 md:items-end">
         {!hasSelectedCanvas && (
           <div className="flex items-center gap-4">
             <button
@@ -62,6 +81,7 @@ export default function ProjectToolbar({
               type="file"
               accept="image/*"
               className="hidden"
+              disabled={isProcessing}
               onChange={(e) => {
                 const file = e.target.files?.[0] ?? null;
                 if (!file) return onPickFile(null, null);
@@ -73,10 +93,9 @@ export default function ProjectToolbar({
         )}
 
         {hasSelectedCanvas && (
-          <div className="flex-1 flex items-center gap-2">
-            <input
-              ref={promptInputRef}
-              type="text"
+          <div className="flex-1 flex items-end gap-2">
+            <textarea
+              ref={promptTextareaRef}
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               onKeyDown={(e) => {
@@ -85,8 +104,10 @@ export default function ProjectToolbar({
                   handleSendPrompt();
                 }
               }}
-              placeholder="Enter your prompt..."
-              className="flex-1 rounded-md px-3 py-2 text-sm border border-gray-300 dark:border-white/20 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="Enter your prompt... (Shift+Enter for new line)"
+              rows={1}
+              className="flex-1 rounded-md px-3 py-2 text-sm border border-gray-300 dark:border-white/20 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none overflow-hidden"
+              style={{ minHeight: "40px", maxHeight: "200px" }}
               disabled={isProcessing}
             />
           </div>
