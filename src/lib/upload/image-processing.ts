@@ -4,7 +4,6 @@ import {
   getThreadPalette,
   mapColorsToThreads,
   buildDitheredManufacturerImage,
-  applyEnhancedAntiAliasing,
   applyColorCorrection,
   type Thread,
 } from "@/lib/colors";
@@ -95,7 +94,9 @@ export async function resizeImageForNeedlepoint(
 }
 
 /**
- * Processes an image through the full needlepoint conversion pipeline
+ * Processes an image through the full needlepoint conversion pipeline.
+ * Applies quantization, thread mapping, and dithering to create a pixel-accurate
+ * manufacturer image where each pixel maps directly to a discrete thread color.
  * @param correctedBuffer Color-corrected image buffer
  * @param numColors Number of colors to use in the palette
  * @returns Processed manufacturer image and dimensions
@@ -127,17 +128,14 @@ export async function processImageForManufacturing(
     return acc;
   }, []);
 
-  // Build manufacturer image using dithered approach for smoother results
+  // Build manufacturer image using dithered approach for pixel-accurate stitch mapping
   console.log(
     `🎨 Building dithered manufacturer image: ${reducedW}×${reducedH} pixels`
   );
-  let manufacturerPngBuffer = await buildDitheredManufacturerImage(
+  const manufacturerPngBuffer = await buildDitheredManufacturerImage(
     correctedBuffer,
     mapped
   );
-
-  // Enhanced anti-aliasing post-processing for smoother transitions
-  manufacturerPngBuffer = await applyEnhancedAntiAliasing(manufacturerPngBuffer);
 
   return {
     manufacturerImageBuffer: manufacturerPngBuffer,

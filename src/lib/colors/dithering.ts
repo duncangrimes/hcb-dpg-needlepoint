@@ -150,7 +150,18 @@ export async function buildDitheredManufacturerImage(
   return sharp(finalImageData, { raw: { width, height, channels: 3 } }).png().toBuffer();
 }
 
-// Enhanced anti-aliasing function for post-processing dithered images
+/**
+ * Enhanced anti-aliasing function for post-processing dithered images.
+ * 
+ * @deprecated This function is no longer used in the manufacturing pipeline.
+ * Anti-aliasing introduces blended colors that don't map to discrete thread shades,
+ * which reduces stitchability. This function is kept for potential future use in
+ * generating preview/display images where visual smoothness is prioritized over
+ * manufacturing accuracy.
+ * 
+ * @param imageBuffer The image buffer to apply anti-aliasing to
+ * @returns Anti-aliased image buffer
+ */
 export async function applyEnhancedAntiAliasing(imageBuffer: Buffer): Promise<Buffer> {
   console.log(`🔧 Applying enhanced anti-aliasing...`);
   
