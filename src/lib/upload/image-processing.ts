@@ -288,6 +288,89 @@ export async function applyMajorityFilter(
 }
 
 /**
+ * Calculates stitchability score by measuring average horizontal run length.
+ * A higher score indicates longer runs of the same color, making the pattern
+ * more practical to stitch with fewer thread changes.
+ * 
+ * Score interpretation:
+ * - >7: Excellent (long runs, easy to stitch)
+ * - 5-7: Good (reasonable runs)
+ * - 3-5: Fair (moderate color changes)
+ * - <3: Poor (many color changes, consider reducing colors)
+ * 
+ * @param buffer Final manufacturer image buffer
+ * @returns Average horizontal run length across all rows
+ */
+export async function calculateStitchabilityScore(buffer: Buffer): Promise<number> {
+  const { data, info } = await sharp(buffer)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  const channels = info.channels;
+  const width = info.width;
+  const height = info.height;
+  
+  let totalRunLength = 0;
+  let totalRuns = 0;
+
+  // Process each row
+  for (let y = 0; y < height; y++) {
+    let currentRunLength = 1;
+    let runsInRow = 1;
+    
+    // Get the first pixel's color for comparison
+    const firstIdx = (y * width) * channels;
+    let prevR = data[firstIdx];
+    let prevG = data[firstIdx + 1];
+    let prevB = data[firstIdx + 2];
+
+    // Scan across the row
+    for (let x = 1; x < width; x++) {
+      const currIdx = (y * width + x) * channels;
+      const currR = data[currIdx];
+      const currG = data[currIdx + 1];
+      const currB = data[currIdx + 2];
+
+      // Check if color changed
+      if (currR === prevR && currG === prevG && currB === prevB) {
+        // Same color, continue run
+        currentRunLength++;
+      } else {
+        // Color changed, end current run
+        totalRunLength += currentRunLength;
+        totalRuns++;
+        runsInRow++;
+        
+        // Start new run
+        currentRunLength = 1;
+        prevR = currR;
+        prevG = currG;
+        prevB = currB;
+      }
+    }
+    
+    // Add the last run in the row
+    totalRunLength += currentRunLength;
+    totalRuns++;
+  }
+
+  // Calculate average run length
+  const averageRunLength = totalRuns > 0 ? totalRunLength / totalRuns : 0;
+  
+  // Also calculate average runs per row for additional context
+  const averageRunsPerRow = totalRuns / height;
+  
+  console.log(
+    `📊 Stitchability: avg run length=${averageRunLength.toFixed(2)}, ` +
+    `avg runs/row=${averageRunsPerRow.toFixed(1)} ` +
+    `(${averageRunLength >= 7 ? "excellent" : averageRunLength >= 5 ? "good" : averageRunLength >= 3 ? "fair" : "poor"})`
+  );
+
+  return averageRunLength;
+}
+
+/**
  * Computes stitch counts per thread color by analyzing the final manufacturer image.
  * Counts how many pixels match each thread's RGB color to estimate material needs.
  * 
@@ -391,6 +474,9 @@ export async function processImageForManufacturing(
     uniqueThreads
   );
 
+  // Calculate stitchability score (average horizontal run length)
+  const stitchabilityScore = await calculateStitchabilityScore(manufacturerPngBuffer);
+
   return {
     manufacturerImageBuffer: manufacturerPngBuffer,
     threads: threadsWithStitches,
@@ -400,7 +486,7 @@ export async function processImageForManufacturing(
       originalWidth: imageWidth,
       originalHeight: imageHeight,
     },
-    stitchabilityScore: 0, // Will be calculated in Phase 5
+    stitchabilityScore,
   };
 }
 
