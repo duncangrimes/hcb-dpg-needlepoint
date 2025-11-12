@@ -43,14 +43,14 @@ export function getRawImagePath(
 }
 
 /**
- * Returns the canonical path for the CANVAS image: /{userId}/{projectId}/{canvasId}/canvas.png
+ * Returns the canonical path for the MANUFACTURER image: /{userId}/{projectId}/{canvasId}/manufacturer.png
  */
-export function getCanvasImagePath(
+export function getManufacturerImagePath(
   userId: string,
   projectId: string,
   canvasId: string
 ): string {
-  return `${getCanvasFolderPath(userId, projectId, canvasId)}/canvas.png`;
+  return `${getCanvasFolderPath(userId, projectId, canvasId)}/manufacturer.png`;
 }
 
 /**
@@ -75,21 +75,21 @@ export async function uploadImageBuffer(
 }
 
 /**
- * Uploads the raw (user) image and processed canvas image to blob storage
+ * Uploads the raw (user) image and processed manufacturer image to blob storage
  * @param projectId The project ID
  * @param rawBuffer The original raw image buffer
- * @param canvasBuffer The processed canvas image buffer
+ * @param manufacturerBuffer The processed manufacturer image buffer
  * @param timestamp Optional timestamp for folder naming
  * @returns URLs for both uploaded images
  */
-export async function uploadCanvasImages(
+export async function uploadManufacturerImage(
   projectId: string,
   rawBuffer: Buffer,
-  canvasBuffer: Buffer,
+  manufacturerBuffer: Buffer,
   timestamp?: number
 ): Promise<{
-  rawUrl: string;
-  canvasUrl: string;
+  rawImgUrl: string;
+  manufacturerImgUrl: string;
 }> {
   const folderPath = generateCanvasFolderPath(projectId, timestamp);
 
@@ -100,14 +100,14 @@ export async function uploadCanvasImages(
   );
 
   // Upload processed canvas image
-  const canvasBlob = await uploadImageBuffer(
-    canvasBuffer,
+  const manufacturerBlob = await uploadImageBuffer(
+    manufacturerBuffer,
     `${folderPath}/canvas.png`
   );
 
   return {
-    rawUrl: rawBlob.url,
-    canvasUrl: canvasBlob.url,
+    rawImgUrl: rawBlob.url,
+    manufacturerImgUrl: manufacturerBlob.url,
   };
 }
 

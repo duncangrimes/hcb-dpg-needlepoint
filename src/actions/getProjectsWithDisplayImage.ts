@@ -2,9 +2,10 @@
 
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { ImageType } from "@prisma/client";
 
 /**
- * Fetch projects with a display image (latest CANVAS image) for the authenticated user.
+ * Fetch projects with a display image (latest MANUFACTURER image) for the authenticated user.
  */
 export async function getProjectsWithDisplayImage() {
 	const session = await auth();
@@ -23,7 +24,7 @@ export async function getProjectsWithDisplayImage() {
 			images: {
 				take: 1,
 				orderBy: { createdAt: "desc" },
-				where: { type: "CANVAS" },
+				where: { type: ImageType.MANUFACTURER },
 				select: { url: true },
 			},
 		},

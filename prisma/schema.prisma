@@ -10,6 +10,7 @@ datasource db {
 enum ImageType {
   CANVAS
   RAW
+  MANUFACTURER
 }
 
 enum ImageSource {

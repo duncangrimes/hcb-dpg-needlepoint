@@ -2,11 +2,13 @@
 
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { ImageType } from "@prisma/client";
+
 
 type ImageRecord = {
   id: string;
   url: string;
-  type: "RAW" | "CANVAS";
+  type: ImageType;
 };
 
 type CanvasRecord = {
@@ -122,7 +124,7 @@ export async function getProjectCanvases(
       images: canvas.images.map((img) => ({
         id: img.id,
         url: img.url,
-        type: img.type as "RAW" | "CANVAS",
+        type: img.type as ImageType,
       })),
     })),
     hasMore,

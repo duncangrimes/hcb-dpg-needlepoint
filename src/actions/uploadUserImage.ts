@@ -11,7 +11,7 @@ import {
 } from "@/lib/upload/config";
 import { prisma } from "@/lib/prisma";
 import {
-  getCanvasImagePath,
+  getManufacturerImagePath,
   getRawImagePath,
   uploadImageBuffer,
 } from "@/lib/upload/storage";
@@ -124,20 +124,20 @@ export async function uploadUserImage(
       heightInStitches
     );
     const corrected = await applyColorCorrection(resized);
-    const { canvasImageBuffer, threads } = await processImageForManufacturing(
+    const { manufacturerImageBuffer, threads } = await processImageForManufacturing(
       corrected,
       config.numColors
     );
 
-    // 10) Upload canvas image to Vercel Blob
-    const canvasPngPath = getCanvasImagePath(userId, canvas.projectId, canvas.id);
-    const canvasBlob = await uploadImageBuffer(canvasImageBuffer, canvasPngPath);
+    // 10) Upload manufacturer image to Vercel Blob
+    const manufacturerPngPath = getManufacturerImagePath(userId, canvas.projectId, canvas.id);
+    const manufacturerImageBlob = await uploadImageBuffer(manufacturerImageBuffer, manufacturerPngPath);
 
-    // 11) Create CANVAS image record
+    // 11) Create MANUFACTURER image record
     await prisma.image.create({
       data: {
-        url: canvasBlob.url,
-        type: ImageType.CANVAS,
+        url: manufacturerImageBlob.url,
+        type: ImageType.MANUFACTURER,
         source: ImageSource.AI_GENERATED,
         canvas: { connect: { id: canvas.id } },
         project: { connect: { id: canvas.projectId } },
@@ -151,7 +151,7 @@ export async function uploadUserImage(
       data: { threads: threads.map((t) => t.floss) },
     });
 
-    // 13) Revalidate project path again to show CANVAS image
+    // 13) Revalidate project path again to show MANUFACTURER image
     revalidatePath(`/project/${canvas.projectId}`);
 
     return { success: true, canvasId: canvas.id };

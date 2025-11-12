@@ -6,15 +6,18 @@ import { ImageType, ImageSource } from "@prisma/client";
 
 export interface CanvasStatus {
   hasRaw: boolean;
-  hasCanvas: boolean;
+  hasManufacturerImage: boolean;
   rawUrl?: string;
-  canvasUrl?: string;
+  manufacturerImageUrl?: string;
   rawSource?: ImageSource;
 }
 
 /**
- * Checks the status of a canvas to see if it has RAW and/or CANVAS images
- * @param canvasId - The canvas ID to check
+ * Checks the status of a Canvas to see if it has RAW and/or MANUFACTURER images.
+ * 
+ * Note: Canvas is the database entity. MANUFACTURER is the ImageType of the processed image.
+ * 
+ * @param canvasId - The Canvas ID to check
  * @returns Object indicating which images are available
  */
 export async function checkCanvasStatus(
@@ -45,14 +48,14 @@ export async function checkCanvasStatus(
     return null;
   }
 
-  const raw = canvas.images.find((img) => img.type === ImageType.RAW);
-  const canvasImg = canvas.images.find((img) => img.type === ImageType.CANVAS);
+  const rawImage = canvas.images.find((img) => img.type === ImageType.RAW);
+  const manufacturerImage = canvas.images.find((img) => img.type === ImageType.MANUFACTURER);
 
   return {
-    hasRaw: !!raw,
-    hasCanvas: !!canvasImg,
-    rawUrl: raw?.url,
-    canvasUrl: canvasImg?.url,
-    rawSource: raw?.source,
+    hasRaw: !!rawImage,
+    hasManufacturerImage: !!manufacturerImage,
+    rawUrl: rawImage?.url,
+    manufacturerImageUrl: manufacturerImage?.url,
+    rawSource: rawImage?.source,
   };
 }

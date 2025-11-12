@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 
-export default function CanvasImageRow({ 
+export default function ManuFacturerImageRow({ 
   url, 
   isSelected = false,
   onClick,

@@ -10,24 +10,27 @@ import {
   downloadImageBuffer,
 } from "@/lib/upload/image-processing";
 import { applyColorCorrection } from "@/lib/colors";
-import { getCanvasImagePath, uploadImageBuffer } from "@/lib/upload/storage";
+import { getManufacturerImagePath, uploadImageBuffer } from "@/lib/upload/storage";
 import { ImageSource, ImageType } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
-export interface ProcessGeneratedCanvasResult {
+export interface ProcessGeneratedManufacturerResult {
   success: boolean;
   error?: string;
 }
 
 /**
- * Processes a generated canvas by applying the full image processing pipeline
- * and creating the CANVAS image
- * @param canvasId - The canvas ID to process
+ * Processes a Canvas's RAW image by applying the full image processing pipeline
+ * and creating the MANUFACTURER image for that Canvas.
+ * 
+ * Note: Canvas is the database entity. MANUFACTURER is the ImageType of the processed image.
+ * 
+ * @param canvasId - The Canvas ID whose RAW image should be processed into a MANUFACTURER image
  * @returns Result indicating success or failure
  */
-export async function processGeneratedCanvas(
+export async function processGeneratedManufacturerImage(
   canvasId: string
-): Promise<ProcessGeneratedCanvasResult> {
+): Promise<ProcessGeneratedManufacturerResult> {
   try {
     // 1) Validate authentication
     const session = await auth();
@@ -37,7 +40,7 @@ export async function processGeneratedCanvas(
 
     const userId = session.user.id;
 
-    // 2) Fetch the canvas and its RAW image
+    // 2) Fetch the Canvas entity and its RAW image
     const canvas = await prisma.canvas.findUnique({
       where: { id: canvasId },
       include: {
@@ -61,15 +64,15 @@ export async function processGeneratedCanvas(
       return { success: false, error: "Canvas does not have an AI-generated RAW image" };
     }
 
-    // Check if CANVAS image already exists
-    const existingCanvasImage = await prisma.image.findFirst({
+    // Check if MANUFACTURER image already exists
+    const existingManufacturerImage = await prisma.image.findFirst({
       where: {
         canvasId: canvasId,
-        type: ImageType.CANVAS,
+        type: ImageType.MANUFACTURER,
       },
     });
 
-    if (existingCanvasImage) {
+    if (existingManufacturerImage) {
       // Already processed
       return { success: true };
     }
@@ -89,20 +92,20 @@ export async function processGeneratedCanvas(
       heightInStitches
     );
     const corrected = await applyColorCorrection(resized);
-    const { canvasImageBuffer, threads } = await processImageForManufacturing(
+    const { manufacturerImageBuffer, threads } = await processImageForManufacturing(
       corrected,
       canvas.numColors
     );
 
-    // 4) Upload CANVAS image to blob storage
-    const canvasPngPath = getCanvasImagePath(userId, canvas.projectId, canvasId);
-    const canvasBlob = await uploadImageBuffer(canvasImageBuffer, canvasPngPath);
+    // 4) Upload MANUFACTURER image to blob storage
+    const manufacturerImagePath = getManufacturerImagePath(userId, canvas.projectId, canvasId);
+    const manufacturerImageBlob = await uploadImageBuffer(manufacturerImageBuffer, manufacturerImagePath);
 
-    // 5) Create CANVAS Image record
+    // 5) Create MANUFACTURER Image record (this is an Image with type MANUFACTURER, belonging to the Canvas)
     await prisma.image.create({
       data: {
-        url: canvasBlob.url,
-        type: ImageType.CANVAS,
+        url: manufacturerImageBlob.url,
+        type: ImageType.MANUFACTURER,
         source: ImageSource.AI_GENERATED,
         canvas: { connect: { id: canvasId } },
         project: { connect: { id: canvas.projectId } },
@@ -110,7 +113,7 @@ export async function processGeneratedCanvas(
       },
     });
 
-    // 6) Update Canvas with threads
+    // 6) Update Canvas entity with threads
     await prisma.canvas.update({
       where: { id: canvasId },
       data: { threads: threads.map((t) => t.floss) },
@@ -120,7 +123,7 @@ export async function processGeneratedCanvas(
 
     return { success: true };
   } catch (error) {
-    console.error("Error processing generated canvas:", error);
+    console.error("Error processing MANUFACTURER image:", error);
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error occurred",

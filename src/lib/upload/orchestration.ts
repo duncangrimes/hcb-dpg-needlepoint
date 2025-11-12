@@ -8,7 +8,7 @@ import {
   processImageForManufacturing,
   downloadImageBuffer,
 } from "./image-processing";
-import { uploadCanvasImages, cleanupBlob } from "./storage";
+import { uploadManufacturerImage, cleanupBlob } from "./storage";
 import type { UploadConfig } from "./config";
 
 export interface ProcessUploadParams {
@@ -49,16 +49,16 @@ export async function processUpload(params: ProcessUploadParams) {
   const correctedBuffer = await applyColorCorrection(resizedBuffer);
 
   // Process image for manufacturing
-  const { canvasImageBuffer, threads } = await processImageForManufacturing(
+  const { manufacturerImageBuffer, threads } = await processImageForManufacturing(
     correctedBuffer,
     numColors
   );
 
   // Upload both images to blob storage
-  const { rawUrl, canvasUrl } = await uploadCanvasImages(
+  const { rawImgUrl, manufacturerImgUrl } = await uploadManufacturerImage(
     projectId,
     imageBuffer,
-    canvasImageBuffer
+    manufacturerImageBuffer
   );
 
   // Create canvas record
@@ -68,8 +68,8 @@ export async function processUpload(params: ProcessUploadParams) {
     meshCount,
     width,
     numColors,
-    rawImageUrl: rawUrl,
-    canvasImageUrl: canvasUrl,
+    rawImageUrl: rawImgUrl,
+    manufacturerImageUrl: manufacturerImgUrl,
     threads,
   });
 
@@ -80,7 +80,7 @@ export async function processUpload(params: ProcessUploadParams) {
   revalidatePath(`/project/${projectId}`);
 
   console.log(
-    `✅ Upload complete: raw=${rawUrl}, canvas=${canvasUrl}, threads=${threads.length}`
+    `✅ Upload complete: raw=${rawImgUrl}, manufacturer=${manufacturerImgUrl}, threads=${threads.length}`
   );
 
   return canvas;

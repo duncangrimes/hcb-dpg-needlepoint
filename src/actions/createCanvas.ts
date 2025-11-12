@@ -12,7 +12,7 @@ export interface CreateCanvasParams {
   width: number;
   numColors: number;
   rawImageUrl: string;
-  canvasImageUrl: string;
+  manufacturerImageUrl: string;
   threads: Thread[];
 }
 
@@ -57,7 +57,7 @@ export async function createCanvas(params: CreateCanvasParams) {
             },
           },
           {
-            url: params.canvasImageUrl,
+            url: params.manufacturerImageUrl,
             type: ImageType.CANVAS,
             source: ImageSource.AI_GENERATED,
             project: {

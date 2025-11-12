@@ -3,17 +3,18 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import RawImageRow from "./RawImageRow";
-import CanvasImageRow from "./CanvasImageRow";
+import ManuFacturerImageRow from "./ManufacturerImageRow";
 import PreviewBubble from "./PreviewBubble";
 import { useRouter } from "next/navigation";
 import ProjectToolbar from "./project-toolbar";
 import { getProjectCanvases } from "@/actions/getProjectCanvases";
 import { checkCanvasStatus } from "@/actions/checkCanvasStatus";
 import { generateAIImage } from "@/actions/generateAIImage";
-import { processGeneratedCanvas } from "@/actions/processGeneratedCanvas";
+import { processGeneratedManufacturerImage } from "@/actions/processGeneratedManufacturerImage";
 import { uploadUserImage } from "@/actions/uploadUserImage";
+import { ImageType } from "@prisma/client";
 
-type ImageRecord = { id: string; url: string; type: "RAW" | "CANVAS" };
+type ImageRecord = { id: string; url: string; type: ImageType };
 type CanvasRecord = {
   id: string;
   meshCount: number;
@@ -58,17 +59,17 @@ export default function ProjectChatClient({
   const pendingGeneratedCanvasIdRef = useRef<string | null>(null);
   const previousCanvasIdsRef = useRef<Set<string>>(new Set());
 
-  // Sync canvases state with server data when new canvases appear (for uploads)
+  // Sync Canvas entities state with server data when new Canvases appear (for uploads)
   // This effect runs when the server refreshes and provides new data
   useEffect(() => {
-    // Capture previous canvas IDs BEFORE updating state
+    // Capture previous Canvas IDs BEFORE updating state
     const previousCanvasIds = new Set(canvases.map((c) => c.id));
     
     setCanvases((prev) => {
       const currentCanvasIds = new Set(prev.map((c) => c.id));
       const newCanvases = initialCanvases.filter((c) => !currentCanvasIds.has(c.id));
       
-      // Update existing canvases with latest data (in case images were added)
+      // Update existing Canvas entities with latest data (in case images were added)
       const updatedCanvases = prev.map((canvas) => {
         const updated = initialCanvases.find((c) => c.id === canvas.id);
         if (updated) {
@@ -82,7 +83,7 @@ export default function ProjectChatClient({
         return canvas;
       });
       
-      // Merge new canvases with existing ones, maintaining order (oldest first for chat)
+      // Merge new Canvas entities with existing ones, maintaining order (oldest first for chat)
       const merged = newCanvases.length > 0 
         ? [...updatedCanvases, ...newCanvases]
         : updatedCanvases;
@@ -93,7 +94,7 @@ export default function ProjectChatClient({
         return a.createdAt.getTime() - b.createdAt.getTime();
       });
       
-      // Update the ref with the new canvas IDs for comparison in next render
+      // Update the ref with the new Canvas IDs for comparison in next render
       previousCanvasIdsRef.current = new Set(sorted.map((c) => c.id));
       
       return sorted;
@@ -105,9 +106,9 @@ export default function ProjectChatClient({
       setOldestCanvasCreatedAt(initialOldestCanvasCreatedAt);
     }
     
-    // If we were processing and now we have canvases with RAW images, stop processing
+    // If we were processing and now we have Canvas entities with RAW images, stop processing
     if (isProcessing) {
-      // If we're waiting for a specific generated canvas, check if it appeared
+      // If we're waiting for a specific generated MANUFACTURER image, check if it appeared
       if (pendingGeneratedCanvasIdRef.current) {
         const targetCanvas = initialCanvases.find(
           (c) => c.id === pendingGeneratedCanvasIdRef.current
@@ -117,8 +118,8 @@ export default function ProjectChatClient({
           pendingGeneratedCanvasIdRef.current = null;
         }
       } else {
-        // For uploads, check if a NEW canvas with RAW images appeared
-        // Compare with previous canvas IDs (before this update) to only detect truly new canvases
+        // For uploads, check if a NEW Canvas with RAW images appeared
+        // Compare with previous Canvas IDs (before this update) to only detect truly new Canvas entities
         const newCanvasWithRaw = initialCanvases.find((c) => 
           !previousCanvasIds.has(c.id) && c.images.some((img) => img.type === "RAW")
         );
@@ -178,27 +179,27 @@ export default function ProjectChatClient({
   };
 
   const messages = useMemo(() => {
-    // Group by canvas: RAW (right), CANVAS (left)
+    // Group by Canvas entity: RAW image (right), MANUFACTURER image (left)
     return canvases.map((c) => {
-      const raw = c.images.find((i) => i.type === "RAW");
-      const canvas = c.images.find((i) => i.type === "CANVAS");
+      const rawImage = c.images.find((i) => i.type === ImageType.RAW);
+      const manufacturerImage = c.images.find((i) => i.type === ImageType.MANUFACTURER);
       return { 
         canvasId: c.id, 
-        rawUrl: raw?.url, 
-        canvasUrl: canvas?.url,
-        rawImageId: raw?.id,
-        canvasImageId: canvas?.id,
+        rawUrl: rawImage?.url, 
+        manufacturerUrl: manufacturerImage?.url,
+        rawImageId: rawImage?.id,
+        manufacturerImageId: manufacturerImage?.id,
       };
     });
   }, [canvases]);
 
-  // Get selected canvas to use its values for the toolbar
+  // Get selected Canvas entity to use its values for the toolbar
   const selectedCanvas = useMemo(() => {
     if (!selectedCanvasId) return null;
     return canvases.find((c) => c.id === selectedCanvasId) || null;
   }, [selectedCanvasId, canvases]);
 
-  // When a canvas is selected, sync state values to canvas values (as defaults)
+  // When a Canvas is selected, sync state values to Canvas values (as defaults)
   // This allows users to modify them from the toolbar
   useEffect(() => {
     if (selectedCanvas) {
@@ -233,7 +234,7 @@ export default function ProjectChatClient({
       const result = await getProjectCanvases(projectId, oldestCanvasCreatedAt);
       
       if (result.canvases.length > 0) {
-        // Prepend older canvases at the beginning (old images appear above new ones)
+        // Prepend older Canvas entities at the beginning (old images appear above new ones)
         setCanvases(prev => [...result.canvases, ...prev]);
         const newOldest = result.canvases[0].createdAt; // First in asc order is oldest
         if (newOldest) {
@@ -247,7 +248,7 @@ export default function ProjectChatClient({
         setHasMore(false);
       }
     } catch (error) {
-      console.error("Error loading more canvases:", error);
+      console.error("Error loading more Canvas entities:", error);
     } finally {
       setIsLoadingMore(false);
       // Reset trigger after a delay to allow DOM update
@@ -258,17 +259,17 @@ export default function ProjectChatClient({
   };
 
   const canvasCount = useMemo(() => messages.length, [messages]);
-  const hasPendingCanvas = useMemo(
-    () => messages.some((m) => m.rawUrl && !m.canvasUrl),
+  const hasPendingManufacturerImage = useMemo(
+    () => messages.some((m) => m.rawUrl && !m.manufacturerUrl),
     [messages]
   );
   
-  // Show spinner if we're uploading or if there are pending canvases
-  const showSpinner = isProcessing || hasPendingCanvas;
+  // Show spinner if we're uploading or if there are Canvas entities pending MANUFACTURER images
+  const showSpinner = isProcessing || hasPendingManufacturerImage;
   
-  // Get list of canvas IDs that are pending (have RAW but no CANVAS)
+  // Get list of Canvas IDs that are pending (have RAW image but no MANUFACTURER image)
   const pendingCanvasIds = useMemo(
-    () => messages.filter((m) => m.rawUrl && !m.canvasUrl).map((m) => m.canvasId),
+    () => messages.filter((m) => m.rawUrl && !m.manufacturerUrl).map((m) => m.canvasId),
     [messages]
   );
   
@@ -318,59 +319,59 @@ export default function ProjectChatClient({
     }
   }, [localPreview]);
 
-  // Track which canvases are being processed to avoid duplicate processing
+  // Track which Canvas entities are being processed to avoid duplicate processing
   const processingCanvasIdsRef = useRef<Set<string>>(new Set());
 
-  // Poll for canvas completion when there are pending canvases
+  // Poll for MANUFACTURER image completion when there are pending Canvas entities
   useEffect(() => {
     if (pendingCanvasIds.length === 0 && !isProcessing) return;
 
     const pollInterval = setInterval(async () => {
-      // If we're processing, check for new canvases first
+      // If we're processing, check for new Canvas entities first
       if (isProcessing) {
         // Refresh to see if the RAW image appeared
         router.refresh();
         return;
       }
       
-      // Check each pending canvas to see if CANVAS image is ready
+      // Check each pending Canvas to see if MANUFACTURER image is ready
       for (const canvasId of pendingCanvasIds) {
         const status = await checkCanvasStatus(canvasId);
         
-        // If we have RAW but no CANVAS, check if this is an AI-generated canvas
+        // If we have RAW image but no MANUFACTURER image, check if this is an AI-generated Canvas
         // and trigger processing if not already processing
         if (
           status?.hasRaw &&
-          !status.hasCanvas &&
+          !status.hasManufacturerImage &&
           status.rawSource === "AI_GENERATED" &&
           !processingCanvasIdsRef.current.has(canvasId)
         ) {
           // Mark as processing to avoid duplicate calls
           processingCanvasIdsRef.current.add(canvasId);
           
-          // Trigger processing asynchronously
-          processGeneratedCanvas(canvasId).catch((error) => {
-            console.error("Error processing canvas:", error);
+          // Trigger processing asynchronously to create the MANUFACTURER image
+          processGeneratedManufacturerImage(canvasId).catch((error) => {
+            console.error("Error processing MANUFACTURER image:", error);
             processingCanvasIdsRef.current.delete(canvasId);
           });
         }
         
-        if (status?.hasCanvas && status.canvasUrl) {
-          // Canvas is ready, update the specific canvas in state
+        if (status?.hasManufacturerImage && status.manufacturerImageUrl) {
+          // MANUFACTURER image is ready, update the specific Canvas entity in state
           setCanvases((prev) =>
             prev.map((canvas) => {
               if (canvas.id === canvasId) {
-                // Check if CANVAS image already exists to avoid duplicates
-                const hasCanvasImage = canvas.images.some((img) => img.type === "CANVAS");
-                if (!hasCanvasImage) {
+                // Check if MANUFACTURER image already exists to avoid duplicates
+                const hasManufacturerImage = canvas.images.some((img) => img.type === ImageType.MANUFACTURER);
+                if (!hasManufacturerImage) {
                   return {
                     ...canvas,
                     images: [
                       ...canvas.images,
                       {
-                        id: `temp-${canvasId}-canvas`,
-                        url: status.canvasUrl!,
-                        type: "CANVAS" as const,
+                        id: `temp-${canvasId}-manufacturer`,
+                        url: status.manufacturerImageUrl!,
+                        type: ImageType.MANUFACTURER,
                       },
                     ],
                   };
@@ -380,7 +381,7 @@ export default function ProjectChatClient({
             })
           );
           
-          // Remove from processing set once CANVAS is ready
+          // Remove from processing set once MANUFACTURER image is ready
           processingCanvasIdsRef.current.delete(canvasId);
         }
       }
@@ -434,7 +435,7 @@ export default function ProjectChatClient({
       
       setSelectedFile(null);
       
-      // Refresh to get the RAW image (which is created immediately)
+      // Refresh to get the RAW image (which is created immediately for the new Canvas)
       // The server action will handle revalidation, but we refresh to ensure UI updates
       router.refresh();
     }).catch((error) => {
@@ -471,9 +472,9 @@ export default function ProjectChatClient({
                   onClick={() => handleCanvasClick(m.canvasId)}
                 />
               )}
-              {m.canvasUrl && (
-                <CanvasImageRow 
-                  url={m.canvasUrl} 
+              {m.manufacturerUrl && (
+                <ManuFacturerImageRow 
+                  url={m.manufacturerUrl} 
                   isSelected={isSelected}
                   onClick={() => handleCanvasClick(m.canvasId)}
                 />
@@ -539,16 +540,16 @@ export default function ProjectChatClient({
           });
           
           await startProcessingAction(async () => {
-            // Find the selected canvas to get its config
+            // Find the selected Canvas entity to get its config
             const selectedCanvas = canvases.find((c) => c.id === selectedCanvasId);
             if (!selectedCanvas) {
-              console.error("Selected canvas not found");
+              console.error("Selected Canvas not found");
               setIsProcessing(false);
               return;
             }
 
             // Generate AI image (this awaits Gemini generation, spinner stays on)
-            // Use current state values (meshCount, width, numColors) instead of selected canvas values
+            // Use current state values (meshCount, width, numColors) instead of selected Canvas values
             const result = await generateAIImage(
               selectedCanvasId,
               projectId,
@@ -566,15 +567,15 @@ export default function ProjectChatClient({
               return;
             }
 
-            // Track the canvas ID we're waiting for - spinner stays on until it appears
+            // Track the Canvas ID we're waiting for - spinner stays on until RAW image appears
             pendingGeneratedCanvasIdRef.current = result.canvasId;
 
             // Clear selection
             setSelectedCanvasId(null);
 
-            // Refresh to show the new RAW image
+            // Refresh to show the new RAW image for the Canvas
             // Processing will be triggered automatically by the polling logic
-            // when it detects the RAW image without a CANVAS image
+            // when it detects the RAW image without a MANUFACTURER image
             // The useEffect will set isProcessing to false when the RAW image appears
             router.refresh();
           }).catch((error) => {

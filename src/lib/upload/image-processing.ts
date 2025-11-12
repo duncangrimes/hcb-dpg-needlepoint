@@ -16,7 +16,7 @@ export interface ImageMetadata {
 }
 
 export interface ProcessedImageResult {
-  canvasImageBuffer: Buffer;
+  manufacturerImageBuffer: Buffer;
   threads: Thread[];
   dimensions: {
     widthInStitches: number;
@@ -140,7 +140,7 @@ export async function processImageForManufacturing(
   manufacturerPngBuffer = await applyEnhancedAntiAliasing(manufacturerPngBuffer);
 
   return {
-    canvasImageBuffer: manufacturerPngBuffer,
+    manufacturerImageBuffer: manufacturerPngBuffer,
     threads: uniqueThreads,
     dimensions: {
       widthInStitches: reducedW,
