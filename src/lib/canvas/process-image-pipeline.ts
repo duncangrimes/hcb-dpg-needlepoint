@@ -50,11 +50,17 @@ export async function processImagePipeline(
   // 4. Apply color correction
   const corrected = await applyColorCorrection(resized);
   
-  // 5. Process image for manufacturing (quantization, dithering, thread mapping)
-  const { manufacturerImageBuffer, threads } = await processImageForManufacturing(
+  // 5. Process image for manufacturing (quantization, dithering, thread mapping, majority filtering)
+  const { manufacturerImageBuffer, threads: threadsWithStitches, stitchabilityScore } = await processImageForManufacturing(
     corrected,
     config.numColors
   );
+
+  console.log(`📊 Stitchability score: ${stitchabilityScore.toFixed(2)} (higher = better)`);
+  
+  // Map ThreadWithStitches to Thread for backward compatibility
+  // (stitch counts are available but not required by this interface)
+  const threads: Thread[] = threadsWithStitches.map(({ stitches, ...thread }) => thread);
   
   return {
     manufacturerImageBuffer,

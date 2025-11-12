@@ -3,6 +3,6 @@ export { getRepresentativeColorsMedianCut, getRepresentativeColorsWu, getReprese
 export { getThreadPalette, mapColorsToThreads } from "./palette";
 export { buildDitheredManufacturerImage, applyEnhancedAntiAliasing } from "./dithering";
 export { buildManufacturerImage, buildSegmentedManufacturerImage } from "./render";
-export type { RepresentativeColorsResult, Thread } from "./types";
+export type { RepresentativeColorsResult, Thread, ThreadWithStitches } from "./types";
 
 

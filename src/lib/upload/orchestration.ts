@@ -49,10 +49,12 @@ export async function processUpload(params: ProcessUploadParams) {
   const correctedBuffer = await applyColorCorrection(resizedBuffer);
 
   // Process image for manufacturing
-  const { manufacturerImageBuffer, threads } = await processImageForManufacturing(
+  const { manufacturerImageBuffer, threads: threadsWithStitches, stitchabilityScore } = await processImageForManufacturing(
     correctedBuffer,
     numColors
   );
+
+  console.log(`📊 Stitchability score: ${stitchabilityScore.toFixed(2)} (higher = better)`);
 
   // Upload both images to blob storage
   const { rawImgUrl, manufacturerImgUrl } = await uploadManufacturerImage(
@@ -60,6 +62,15 @@ export async function processUpload(params: ProcessUploadParams) {
     imageBuffer,
     manufacturerImageBuffer
   );
+
+  // Map ThreadWithStitches to Thread for createCanvas (it only needs floss codes)
+  // Log stitch counts for user information
+  const threads = threadsWithStitches.map(({ stitches, ...thread }) => {
+    if (stitches > 0) {
+      console.log(`  - ${thread.floss} (${thread.name}): ${stitches} stitches`);
+    }
+    return thread;
+  });
 
   // Create canvas record
   const canvas = await createCanvas({
