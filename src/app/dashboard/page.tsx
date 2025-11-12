@@ -1,8 +1,8 @@
 'use client'
 
-import { createProject } from "@/actions/createProject";
-import { getProjects } from "@/actions/getProjects";
-import { getProjectsWithDisplayImage } from "@/actions/getProjectsWithDisplayImage";
+import { createProject } from "@/actions/project/createProject";
+import { getProjects } from "@/actions/project/getProjects";
+import { getProjectsWithDisplayImage } from "@/actions/project/getProjectsWithDisplayImage";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useActionState, useState, useCallback } from "react";

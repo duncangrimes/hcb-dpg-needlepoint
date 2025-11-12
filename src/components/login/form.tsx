@@ -1,6 +1,6 @@
 'use client'
 
-import { loginWithEmail } from "@/actions/loginWithEmail";
+import { loginWithEmail } from "@/actions/auth/loginWithEmail";
 import { LoginSchema } from "@/lib/zod-schema";
 import { useState } from "react";
 

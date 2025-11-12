@@ -1,5 +1,5 @@
 import { applyColorCorrection } from "@/lib/colors";
-import { createCanvas } from "@/actions/createCanvas";
+import { createCanvas } from "@/actions/canvas/createCanvas";
 import { revalidatePath } from "next/cache";
 import {
   extractImageMetadata,

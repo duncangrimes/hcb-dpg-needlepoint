@@ -7,11 +7,11 @@ import ManuFacturerImageRow from "./ManufacturerImageRow";
 import PreviewBubble from "./PreviewBubble";
 import { useRouter } from "next/navigation";
 import ProjectToolbar from "./project-toolbar";
-import { getProjectCanvases } from "@/actions/getProjectCanvases";
-import { checkCanvasStatus } from "@/actions/checkCanvasStatus";
-import { generateAIImage } from "@/actions/generateAIImage";
-import { processGeneratedManufacturerImage } from "@/actions/processGeneratedManufacturerImage";
-import { uploadUserImage } from "@/actions/uploadUserImage";
+import { getProjectCanvases } from "@/actions/canvas/getProjectCanvases";
+import { checkCanvasStatus } from "@/actions/canvas/checkCanvasStatus";
+import { generateAIImage } from "@/actions/canvas/generateAIImage";
+import { processGeneratedManufacturerImage } from "@/actions/canvas/processGeneratedManufacturerImage";
+import { uploadUserImage } from "@/actions/canvas/uploadUserImage";
 import { ImageType } from "@prisma/client";
 
 type ImageRecord = { id: string; url: string; type: ImageType };

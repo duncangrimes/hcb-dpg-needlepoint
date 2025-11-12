@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import ProjectChatClient from "@/components/project/chat/project-chat-client";
 import { notFound } from "next/navigation";
-import { getProjectCanvases } from "@/actions/getProjectCanvases";
+import { getProjectCanvases } from "@/actions/canvas/getProjectCanvases";
 
 export default async function ProjectPage({
   params,

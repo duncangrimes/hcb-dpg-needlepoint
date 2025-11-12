@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useTransition } from "react";
-import { deleteProject } from "@/actions/deleteProject";
+import { deleteProject } from "@/actions/project/deleteProject";
 
 type ProjectCardProps = {
   id: string;

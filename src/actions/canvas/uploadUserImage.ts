@@ -11,8 +11,7 @@ import {
 } from "@/lib/upload/config";
 import { prisma } from "@/lib/prisma";
 import { getRawImagePath } from "@/lib/upload/storage";
-import { processImagePipeline } from "@/lib/canvas/process-image-pipeline";
-import { createManufacturerImage } from "@/lib/canvas/create-manufacturer-image";
+import { processImagePipeline, createManufacturerImage } from "@/lib/canvas";
 import { ImageSource, ImageType } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 

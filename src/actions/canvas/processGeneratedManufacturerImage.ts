@@ -3,8 +3,7 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { downloadImageBuffer } from "@/lib/upload/image-processing";
-import { processImagePipeline } from "@/lib/canvas/process-image-pipeline";
-import { createManufacturerImage } from "@/lib/canvas/create-manufacturer-image";
+import { processImagePipeline, createManufacturerImage } from "@/lib/canvas";
 import { ImageSource, ImageType } from "@prisma/client";
 
 export interface ProcessGeneratedManufacturerResult {
