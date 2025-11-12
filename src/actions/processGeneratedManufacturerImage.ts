@@ -2,7 +2,7 @@
 
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { downloadImageBuffer } from "@/lib/upload/image-processing";
+import { downloadImageBuffer } from "@/lib/upload/manufacturer-image-processing";
 import { processImagePipeline } from "@/lib/canvas/process-image-pipeline";
 import { createManufacturerImage } from "@/lib/canvas/create-manufacturer-image";
 import { ImageSource, ImageType } from "@prisma/client";

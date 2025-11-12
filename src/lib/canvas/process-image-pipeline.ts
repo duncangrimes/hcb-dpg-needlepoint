@@ -3,7 +3,7 @@ import {
   calculateStitchDimensions,
   resizeImageForNeedlepoint,
   processImageForManufacturing,
-} from "@/lib/upload/image-processing";
+} from "@/lib/upload/manufacturer-image-processing";
 import { applyColorCorrection } from "@/lib/colors";
 import type { Thread } from "@/lib/colors";
 

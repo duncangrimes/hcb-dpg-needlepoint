@@ -7,9 +7,9 @@ import {
   resizeImageForNeedlepoint,
   processImageForManufacturing,
   downloadImageBuffer,
-} from "./image-processing";
+} from "./manufacturer-image-processing";
 import { uploadManufacturerImage, cleanupBlob } from "./storage";
-import type { UploadConfig } from "./config";
+import type { UploadConfig } from "@/config/upload.config";
 
 export interface ProcessUploadParams {
   blobUrl: string;

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import RangeSlider from "./RangeSlider";
+import { UPLOAD_CONSTRAINTS } from "@/config/upload.config";
 
 export default function ProjectToolbar({
   isProcessing,
@@ -118,7 +119,7 @@ export default function ProjectToolbar({
           <fieldset>
             <legend className="text-xs font-semibold text-gray-900 dark:text-white">Mesh</legend>
             <div className="mt-2 flex items-center gap-4">
-              {[13, 18].map((v) => (
+              {UPLOAD_CONSTRAINTS.meshCount.map((v) => (
                 <label key={v} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
                   <input
                     type="radio"
@@ -136,8 +137,8 @@ export default function ProjectToolbar({
           <RangeSlider
             label="Width (in)"
             value={width}
-            min={6}
-            max={14}
+            min={UPLOAD_CONSTRAINTS.widthMin}
+            max={UPLOAD_CONSTRAINTS.widthMax}
             step={0.5}
             onChange={onWidthChange}
             disabled={isProcessing}
@@ -146,8 +147,8 @@ export default function ProjectToolbar({
           <RangeSlider
             label="Colors"
             value={numColors}
-            min={4}
-            max={30}
+            min={UPLOAD_CONSTRAINTS.numColorsMin}
+            max={UPLOAD_CONSTRAINTS.numColorsMax}
             step={2}
             onChange={onNumColorsChange}
             disabled={isProcessing}

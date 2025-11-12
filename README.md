@@ -24,8 +24,8 @@ The complete pipeline processes images through the following steps:
 #### 4. **Resize with Adaptive Blur**
 - Resizes image to exact stitch dimensions using Lanczos3 interpolation
 - Applies adaptive blur based on edge density:
-  - **High-detail images** (>25% edge density): sigma = 1.5 (more blur to reduce noise)
-  - **Normal images** (≤25% edge density): sigma = 0.5 (minimal blur to preserve sharpness)
+  - **High-detail images** (>25% edge density): sigma = 1.0 (moderate blur to reduce noise)
+  - **Normal images** (≤25% edge density): sigma = 0.3 (minimal blur to preserve sharpness)
 - Applies moderate saturation boost (1.3x) and slight brightness adjustment (1.02x)
 - **Purpose**: Reduces noise in complex images while preserving detail in simple designs
 

@@ -3,7 +3,7 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { validateProjectOwnership } from "@/lib/upload/validation";
-import { downloadImageBuffer } from "@/lib/upload/image-processing";
+import { downloadImageBuffer } from "@/lib/upload/manufacturer-image-processing";
 import { getRawImagePath, uploadImageBuffer } from "@/lib/upload/storage";
 import { ImageSource, ImageType } from "@prisma/client";
 import { GoogleGenAI } from "@google/genai";

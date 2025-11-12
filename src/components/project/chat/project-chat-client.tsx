@@ -13,6 +13,7 @@ import { generateAIImage } from "@/actions/canvas/generateAIImage";
 import { processGeneratedManufacturerImage } from "@/actions/canvas/processGeneratedManufacturerImage";
 import { uploadUserImage } from "@/actions/canvas/uploadUserImage";
 import { ImageType } from "@prisma/client";
+import { DEFAULT_UPLOAD_CONFIG } from "@/config/upload.config";
 
 type ImageRecord = { id: string; url: string; type: ImageType };
 type CanvasRecord = {
@@ -51,9 +52,9 @@ export default function ProjectChatClient({
   const [localPreview, setLocalPreview] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [meshCount, setMeshCount] = useState<number>(13);
-  const [width, setWidth] = useState<number>(8);
-  const [numColors, setNumColors] = useState<number>(12);
+  const [meshCount, setMeshCount] = useState<number>(DEFAULT_UPLOAD_CONFIG.meshCount);
+  const [width, setWidth] = useState<number>(DEFAULT_UPLOAD_CONFIG.width);
+  const [numColors, setNumColors] = useState<number>(DEFAULT_UPLOAD_CONFIG.numColors);
   const [selectedCanvasId, setSelectedCanvasId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const pendingGeneratedCanvasIdRef = useRef<string | null>(null);

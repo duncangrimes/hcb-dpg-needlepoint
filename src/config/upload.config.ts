@@ -17,8 +17,8 @@ export interface UploadConstraints {
  */
 export const UPLOAD_CONSTRAINTS: UploadConstraints = {
   meshCount: [13, 18] as const,
-  widthMin: 6,
-  widthMax: 14,
+  widthMin: 2,
+  widthMax: 12,
   numColorsMin: 3,
   numColorsMax: 30,
 };

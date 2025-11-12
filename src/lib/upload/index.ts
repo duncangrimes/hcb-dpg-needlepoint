@@ -6,8 +6,7 @@
  */
 
 export * from "./validation";
-export * from "./config";
-export * from "./image-processing";
+export * from "./manufacturer-image-processing";
 export * from "./storage";
 export * from "./orchestration";
 

@@ -8,7 +8,7 @@ import {
 import {
   validateAndNormalizeConfig,
   ALLOWED_CONTENT_TYPES,
-} from "@/lib/upload/config";
+} from "@/config/upload.config";
 import { prisma } from "@/lib/prisma";
 import { getRawImagePath } from "@/lib/upload/storage";
 import { processImagePipeline } from "@/lib/canvas/process-image-pipeline";
