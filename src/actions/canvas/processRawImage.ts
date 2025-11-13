@@ -15,12 +15,14 @@ export interface ProcessGeneratedManufacturerResult {
  * Processes a Canvas's RAW image by applying the full image processing pipeline
  * and creating the MANUFACTURER image for that Canvas.
  * 
+ * This function handles both USER_UPLOAD and AI_GENERATED image sources.
+ * 
  * Note: Canvas is the database entity. MANUFACTURER is the ImageType of the processed image.
  * 
  * @param canvasId - The Canvas ID whose RAW image should be processed into a MANUFACTURER image
  * @returns Result indicating success or failure
  */
-export async function processGeneratedManufacturerImage(
+export async function processRawImage(
   canvasId: string
 ): Promise<ProcessGeneratedManufacturerResult> {
   try {
@@ -37,7 +39,7 @@ export async function processGeneratedManufacturerImage(
       where: { id: canvasId },
       include: {
         images: {
-          where: { type: ImageType.RAW, source: ImageSource.AI_GENERATED },
+          where: { type: ImageType.RAW },
         },
         project: {
           select: { id: true, userId: true },
@@ -49,11 +51,9 @@ export async function processGeneratedManufacturerImage(
       return { success: false, error: "Canvas not found or not authorized" };
     }
 
-    const rawImage = canvas.images.find(
-      (img) => img.type === ImageType.RAW && img.source === ImageSource.AI_GENERATED
-    );
+    const rawImage = canvas.images.find((img) => img.type === ImageType.RAW);
     if (!rawImage) {
-      return { success: false, error: "Canvas does not have an AI-generated RAW image" };
+      return { success: false, error: "Canvas does not have a RAW image" };
     }
 
     // Check if MANUFACTURER image already exists
@@ -86,6 +86,7 @@ export async function processGeneratedManufacturerImage(
       projectId: canvas.projectId,
       manufacturerImageBuffer,
       threads,
+      source: rawImage.source, // Match the source of the RAW image
     });
 
     return { success: true };

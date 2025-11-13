@@ -10,6 +10,7 @@ export interface CreateManufacturerImageParams {
   projectId: string;
   manufacturerImageBuffer: Buffer;
   threads: Thread[];
+  source: ImageSource;
 }
 
 /**
@@ -27,7 +28,7 @@ export interface CreateManufacturerImageParams {
 export async function createManufacturerImage(
   params: CreateManufacturerImageParams
 ) {
-  const { canvasId, userId, projectId, manufacturerImageBuffer, threads } = params;
+  const { canvasId, userId, projectId, manufacturerImageBuffer, threads, source } = params;
 
   // 1. Upload manufacturer image to blob storage
   const manufacturerImagePath = getManufacturerImagePath(userId, projectId, canvasId);
@@ -41,7 +42,7 @@ export async function createManufacturerImage(
     data: {
       url: manufacturerImageBlob.url,
       type: ImageType.MANUFACTURER,
-      source: ImageSource.AI_GENERATED,
+      source,
       canvas: { connect: { id: canvasId } },
       project: { connect: { id: projectId } },
       user: { connect: { id: userId } },

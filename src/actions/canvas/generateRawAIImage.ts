@@ -4,12 +4,15 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { validateProjectOwnership } from "@/lib/upload/validation";
 import { downloadImageBuffer } from "@/lib/upload/manufacturer-image-processing";
-import { getRawImagePath, uploadImageBuffer } from "@/lib/upload/storage";
+import {
+  processImagePipeline,
+  createManufacturerImage,
+  createCanvasWithRawImage,
+} from "@/lib/canvas";
 import { ImageSource, ImageType } from "@prisma/client";
 import { GoogleGenAI } from "@google/genai";
-import { revalidatePath } from "next/cache";
 
-export interface GenerateAIImageResult {
+export interface GenerateRawAIImageResult {
   success: boolean;
   canvasId?: string;
   error?: string;
@@ -25,14 +28,14 @@ export interface GenerateAIImageResult {
  * @param numColors - The number of colors to use for the new canvas
  * @returns Result with new canvas ID or error
  */
-export async function generateAIImage(
+export async function generateRawAIImage(
   canvasId: string,
   projectId: string,
   prompt: string,
   meshCount: number,
   width: number,
   numColors: number
-): Promise<GenerateAIImageResult> {
+): Promise<GenerateRawAIImageResult> {
   try {
     // 1) Validate authentication and ownership
     const session = await auth();
@@ -103,10 +106,6 @@ export async function generateAIImage(
       model: "gemini-2.5-flash-image",
       contents: promptContents,
     });
-
-    // Log the full response structure
-    console.log("=== GEMINI API RESPONSE ===");
-    console.log("Full response object:", JSON.stringify(response, null, 2));
     
     // Extract image data from response following the documentation pattern
     let generatedImageBuffer: Buffer | null = null;
@@ -157,51 +156,35 @@ export async function generateAIImage(
       };
     }
 
-    // 5) Create new Canvas record with provided config values
-    const newCanvas = await prisma.canvas.create({
-      data: {
-        project: { connect: { id: projectId } },
-        user: { connect: { id: userId } },
-        meshCount: meshCount,
-        width: width,
-        numColors: numColors,
-        threads: [],
-      },
-      select: { id: true, projectId: true },
+    // 5) Create new Canvas and RAW image record (consolidated helper)
+    const { canvasId: newCanvasId, rawImageId } = await createCanvasWithRawImage({
+      userId,
+      projectId,
+      rawImageBuffer: generatedImageBuffer!,
+      meshCount,
+      width,
+      numColors,
+      source: ImageSource.AI_GENERATED,
+      contentType: "image/png", // Gemini generates PNG images
     });
 
-    // 6) Upload generated image to blob storage
-    const rawImagePath = getRawImagePath(userId, projectId, newCanvas.id);
-    const uploadedBlob = await uploadImageBuffer(generatedImageBuffer!, rawImagePath);
-
-    // 8) Create Image record (type=RAW, source=AI_GENERATED)
-    const generatedImage = await prisma.image.create({
-      data: {
-        url: uploadedBlob.url,
-        type: ImageType.RAW,
-        source: ImageSource.AI_GENERATED,
-        canvas: { connect: { id: newCanvas.id } },
-        project: { connect: { id: projectId } },
-        user: { connect: { id: userId } },
-      },
-      select: { id: true },
-    });
-
-    // 9) Create Prompt record linking original to generated
+    // 6) Create Prompt record linking original to generated
     await prisma.prompt.create({
       data: {
         text: prompt,
         originalImageId: rawImage.id,
-        generatedImageId: generatedImage.id,
-        canvas: { connect: { id: newCanvas.id } },
+        generatedImageId: rawImageId,
+        canvas: { connect: { id: newCanvasId } },
         project: { connect: { id: projectId } },
         user: { connect: { id: userId } },
       },
     });
 
-    revalidatePath(`/project/${projectId}`);
+    // Note: MANUFACTURER image processing will be triggered automatically
+    // by the polling logic in project-chat-client.tsx when it detects
+    // a RAW image with source AI_GENERATED but no MANUFACTURER image
 
-    return { success: true, canvasId: newCanvas.id };
+    return { success: true, canvasId: newCanvasId };
   } catch (error) {
     console.error("Error generating AI image:", error);
     return {

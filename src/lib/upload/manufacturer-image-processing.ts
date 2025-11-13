@@ -16,7 +16,7 @@ export interface ImageMetadata {
   aspectRatio: number;
 }
 
-export interface ProcessedImageResult {
+export interface ManufacturerImageResult {
   manufacturerImageBuffer: Buffer;
   threads: ThreadWithStitches[];
   dimensions: {
@@ -450,7 +450,7 @@ export async function computeThreadStitches(
 export async function processImageForManufacturing(
   correctedBuffer: Buffer,
   numColors: number
-): Promise<ProcessedImageResult> {
+): Promise<ManufacturerImageResult> {
   // Get image dimensions for logging
   const metadata = await sharp(correctedBuffer).metadata();
   const imageWidth = metadata.width ?? 0;

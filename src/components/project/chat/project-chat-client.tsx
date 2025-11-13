@@ -9,9 +9,9 @@ import { useRouter } from "next/navigation";
 import ProjectToolbar from "./project-toolbar";
 import { getProjectCanvases } from "@/actions/canvas/getProjectCanvases";
 import { checkCanvasStatus } from "@/actions/canvas/checkCanvasStatus";
-import { generateAIImage } from "@/actions/canvas/generateAIImage";
-import { processGeneratedManufacturerImage } from "@/actions/canvas/processGeneratedManufacturerImage";
-import { uploadUserImage } from "@/actions/canvas/uploadUserImage";
+import { generateRawAIImage } from "@/actions/canvas/generateRawAIImage";
+import { processRawImage } from "@/actions/canvas/processRawImage";
+import { uploadRawUserImage } from "@/actions/canvas/uploadRawUserImage";
 import { ImageType } from "@prisma/client";
 import { DEFAULT_UPLOAD_CONFIG } from "@/config/upload.config";
 
@@ -339,19 +339,18 @@ export default function ProjectChatClient({
       for (const canvasId of pendingCanvasIds) {
         const status = await checkCanvasStatus(canvasId);
         
-        // If we have RAW image but no MANUFACTURER image, check if this is an AI-generated Canvas
-        // and trigger processing if not already processing
+        // If we have RAW image but no MANUFACTURER image, trigger processing
+        // This handles both USER_UPLOAD and AI_GENERATED sources
         if (
           status?.hasRaw &&
           !status.hasManufacturerImage &&
-          status.rawSource === "AI_GENERATED" &&
           !processingCanvasIdsRef.current.has(canvasId)
         ) {
           // Mark as processing to avoid duplicate calls
           processingCanvasIdsRef.current.add(canvasId);
           
           // Trigger processing asynchronously to create the MANUFACTURER image
-          processGeneratedManufacturerImage(canvasId).catch((error) => {
+          processRawImage(canvasId).catch((error) => {
             console.error("Error processing MANUFACTURER image:", error);
             processingCanvasIdsRef.current.delete(canvasId);
           });
@@ -425,7 +424,7 @@ export default function ProjectChatClient({
       formData.append("numColors", numColors.toString());
       
       // Call server action
-      const result = await uploadUserImage(formData);
+      const result = await uploadRawUserImage(formData);
       
       if (!result.success) {
         console.error("Upload error:", result.error);
@@ -551,7 +550,7 @@ export default function ProjectChatClient({
 
             // Generate AI image (this awaits Gemini generation, spinner stays on)
             // Use current state values (meshCount, width, numColors) instead of selected Canvas values
-            const result = await generateAIImage(
+            const result = await generateRawAIImage(
               selectedCanvasId,
               projectId,
               prompt,

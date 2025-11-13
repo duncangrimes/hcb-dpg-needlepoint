@@ -9,11 +9,8 @@ import {
   validateAndNormalizeConfig,
   ALLOWED_CONTENT_TYPES,
 } from "@/config/upload.config";
-import { prisma } from "@/lib/prisma";
-import { getRawImagePath } from "@/lib/upload/storage";
-import { processImagePipeline, createManufacturerImage } from "@/lib/canvas";
-import { ImageSource, ImageType } from "@prisma/client";
-import { revalidatePath } from "next/cache";
+import { createCanvasWithRawImage } from "@/lib/canvas";
+import { ImageSource } from "@prisma/client";
 
 export interface UploadUserImageResult {
   success: boolean;
@@ -21,7 +18,7 @@ export interface UploadUserImageResult {
   canvasId?: string;
 }
 
-export async function uploadUserImage(
+export async function uploadRawUserImage(
   formData: FormData
 ): Promise<UploadUserImageResult> {
   try {
@@ -65,59 +62,23 @@ export async function uploadUserImage(
     const arrayBuffer = await file.arrayBuffer();
     const rawBuffer = Buffer.from(arrayBuffer);
 
-    // 5) Create canvas record
-    const canvas = await prisma.canvas.create({
-      data: {
-        project: { connect: { id: params.projectId! } },
-        user: { connect: { id: userId } },
-        meshCount: config.meshCount,
-        width: config.width,
-        numColors: config.numColors,
-        threads: [],
-      },
-      select: { id: true, projectId: true },
-    });
-
-    // 6) Upload raw image to Vercel Blob (preserve original file type)
-    const rawImagePath = getRawImagePath(userId, canvas.projectId, canvas.id);
-    const { put } = await import("@vercel/blob");
-    const rawBlob = await put(rawImagePath, rawBuffer, {
-      access: "public",
-      contentType: file.type,
-    });
-
-    // 7) Create RAW image record immediately (so user sees it right away)
-    await prisma.image.create({
-      data: {
-        url: rawBlob.url,
-        type: ImageType.RAW,
-        source: ImageSource.USER_UPLOAD,
-        canvas: { connect: { id: canvas.id } },
-        project: { connect: { id: canvas.projectId } },
-        user: { connect: { id: userId } },
-      },
-    });
-
-    // 8) Revalidate project path to show RAW image immediately
-    revalidatePath(`/project/${canvas.projectId}`);
-
-    // 9) Process image pipeline (happens after RAW is visible)
-    const { manufacturerImageBuffer, threads } = await processImagePipeline(rawBuffer, {
-      width: config.width,
-      meshCount: config.meshCount,
-      numColors: config.numColors,
-    });
-
-    // 10) Create MANUFACTURER image (upload, create record, update canvas, revalidate)
-    await createManufacturerImage({
-      canvasId: canvas.id,
+    // 5) Create canvas and RAW image record (consolidated helper)
+    const { canvasId } = await createCanvasWithRawImage({
       userId,
-      projectId: canvas.projectId,
-      manufacturerImageBuffer,
-      threads,
+      projectId: params.projectId!,
+      rawImageBuffer: rawBuffer,
+      meshCount: config.meshCount,
+      width: config.width,
+      numColors: config.numColors,
+      source: ImageSource.USER_UPLOAD,
+      contentType: file.type, // Preserve original file type
     });
 
-    return { success: true, canvasId: canvas.id };
+    // Note: MANUFACTURER image processing will be triggered automatically
+    // by the polling logic in project-chat-client.tsx when it detects
+    // a RAW image without a MANUFACTURER image
+
+    return { success: true, canvasId };
   } catch (error) {
     console.error("Error uploading user image:", error);
     return {

@@ -57,15 +57,17 @@ export function getManufacturerImagePath(
  * Uploads an image buffer to blob storage
  * @param buffer The image buffer to upload
  * @param path The full path including filename for the blob
+ * @param contentType Optional content type (defaults to "image/png")
  * @returns Uploaded blob information
  */
 export async function uploadImageBuffer(
   buffer: Buffer,
-  path: string
+  path: string,
+  contentType: string = "image/png"
 ): Promise<UploadedBlob> {
   const blob = await put(path, buffer, {
     access: "public",
-    contentType: "image/png",
+    contentType,
   });
 
   return {
