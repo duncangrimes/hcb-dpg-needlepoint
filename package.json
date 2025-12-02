@@ -12,6 +12,7 @@
     "prisma": "node scripts/prisma-with-env.js",
     "db:migrate": "node scripts/prisma-with-env.js migrate dev",
     "db:push": "node scripts/prisma-with-env.js db push",
+    "db:pull": "node scripts/prisma-with-env.js db pull",
     "db:studio": "node scripts/prisma-with-env.js studio",
     "db:seed": "node scripts/prisma-with-env.js db seed",
     "db:reset": "node scripts/prisma-with-env.js migrate reset"
