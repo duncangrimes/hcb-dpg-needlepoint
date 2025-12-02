@@ -154,8 +154,13 @@ export async function calculateEdgeDensity(
 
 /**
  * Resizes and pre-processes an image for needlepoint conversion.
- * Applies adaptive blur based on image detail density to reduce noise
- * in complex images while preserving sharpness in simple designs.
+ * 
+ * UPDATED STRATEGY:
+ * Replaced Gaussian Blur with Median Filter. Gaussian blur causes color bleeding
+ * (averaging colors at edges). Median filter performs "Edge Preserving Smoothing,"
+ * flattening textures (like fabric weave) into solid color blocks while keeping
+ * the boundary between objects (like hoodie vs face) razor sharp.
+ * 
  * @param imageBuffer The original image buffer
  * @param targetWidth Target width in stitches
  * @param targetHeight Target height in stitches
@@ -166,35 +171,58 @@ export async function resizeImageForNeedlepoint(
   targetWidth: number,
   targetHeight: number
 ): Promise<Buffer> {
-  // Calculate edge density to determine adaptive blur amount
+  // Calculate edge density to determine processing intensity
   const edgeDensity = await calculateEdgeDensity(imageBuffer);
   
-  // Apply adaptive blur: more blur for high-detail images
-  // This reduces noise in complex images while preserving sharpness in simple designs
-  const { highDetailThreshold, highDetailBlurSigma, normalBlurSigma } = {
-    highDetailThreshold: IMAGE_PROCESSING_CONFIG.edgeDensity.highDetailThreshold,
-    highDetailBlurSigma: IMAGE_PROCESSING_CONFIG.adaptiveBlur.highDetailBlurSigma,
-    normalBlurSigma: IMAGE_PROCESSING_CONFIG.adaptiveBlur.normalBlurSigma,
-  };
+  // Configuration
+  const { highDetailThreshold } = IMAGE_PROCESSING_CONFIG.edgeDensity;
   
-  const blurSigma = edgeDensity > highDetailThreshold ? highDetailBlurSigma : normalBlurSigma;
-  
+  // Logic:
+  // High Detail (> threshold): Use Median filter. This creates the "posterized" 
+  // effect desirable for needlepoint, removing noise while keeping edges crisp.
+  // Low Detail: Use very mild Gaussian blur just to reduce resizing artifacts.
+  const isHighDetail = edgeDensity > highDetailThreshold;
+
   console.log(
-    `🔧 Adaptive blur: ${edgeDensity > highDetailThreshold ? "high-detail" : "normal"} image, using sigma=${blurSigma}`
+    `🔧 Pre-processing: ${isHighDetail ? "Complex" : "Simple"} image ` +
+    `(${Math.round(edgeDensity * 100)}% density). Using ${isHighDetail ? "Median Filter" : "Light Blur"}.`
   );
 
-  return sharp(imageBuffer)
+  let pipeline = sharp(imageBuffer)
     .resize(targetWidth, targetHeight, {
       kernel: sharp.kernel.lanczos3,
-      fit: "fill", // ensure exact pixel grid without cropping
+      fit: "fill", 
     })
     .modulate({ 
       saturation: IMAGE_PROCESSING_CONFIG.imageEnhancement.saturationBoost, 
       brightness: IMAGE_PROCESSING_CONFIG.imageEnhancement.brightnessAdjustment 
-    })
-    .blur(blurSigma) // adaptive blur based on image complexity
-    .png()
-    .toBuffer();
+    });
+
+  if (isHighDetail) {
+    // MEDIAN FILTER: The key to stopping color bleeding.
+    // It looks at the 3x3 neighbor and picks the median value.
+    // This removes "salt and pepper" noise and smoothes textures without blurring edges.
+    pipeline = pipeline.median(3);
+  } else {
+    // For very simple images, a median filter might look too blocky too fast.
+    // We use a very small gaussian blur just to smooth out the Lanczos3 resampling artifacts.
+    pipeline = pipeline.blur(0.4);
+  }
+
+  // SHARPENING:
+  // After smoothing, we apply a mild sharpen. This increases local contrast at boundaries,
+  // pushing pixels at the edge "away" from the average and towards their distinct colors.
+  // This helps the Color Quantizer (Wu's) distinguish the two regions.
+  pipeline = pipeline.sharpen({
+    sigma: 1,
+    m1: 0.5,
+    m2: 0.5,
+    x1: 2,
+    y2: 10,
+    y3: 20,
+  });
+
+  return pipeline.png().toBuffer();
 }
 
 /**
