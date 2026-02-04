@@ -24,32 +24,13 @@ export async function getThreadPalette(): Promise<Thread[]> {
     throw new Error("Invalid thread palette data");
   }
   
-  // Filter out dull colors to ensure vibrant needlepoint results
-  const vibrantThreads = parsed.data.filter(thread => {
-    const saturation = getSaturation(thread.r, thread.g, thread.b);
-    const isDullColor = thread.name.toLowerCase().includes('gray') ||
-                       thread.name.toLowerCase().includes('beige') ||
-                       thread.name.toLowerCase().includes('dusty') ||
-                       thread.name.toLowerCase().includes('mocha') ||
-                       thread.name.toLowerCase().includes('pewter') ||
-                       thread.name.toLowerCase().includes('shell') ||
-                       thread.name.toLowerCase().includes('ash') ||
-                       thread.name.toLowerCase().includes('beaver') ||
-                       thread.name.toLowerCase().includes('brown gray') ||
-                       thread.name.toLowerCase().includes('steel gray') ||
-                       thread.name.toLowerCase().includes('pearl gray') ||
-                       thread.name.toLowerCase().includes('off white') ||
-                       thread.name.toLowerCase().includes('winter white') ||
-                       thread.name.toLowerCase().includes('snow white') ||
-                       thread.name.toLowerCase().includes('ecru') ||
-                       (thread.name.toLowerCase().includes('white') && !thread.name.toLowerCase().includes('bright')) ||
-                       saturation < 0.15; // Remove very low saturation colors
-    
-    return !isDullColor;
-  });
-  
-  console.log(`🎨 Filtered thread palette: ${parsed.data.length} → ${vibrantThreads.length} vibrant colors`);
-  cachedPalette = vibrantThreads;
+  // Include the full DMC palette — neutrals, grays, and whites are needed for
+  // realistic subjects (skin tones, animals, buildings). Color vibrancy should
+  // be achieved through palette selection, not by removing available colors.
+  // The old filter removed grays, beiges, whites, and low-saturation colors,
+  // which made it impossible to accurately represent many real-world subjects.
+  console.log(`🎨 Thread palette loaded: ${parsed.data.length} colors available`);
+  cachedPalette = parsed.data;
   return cachedPalette;
 }
 

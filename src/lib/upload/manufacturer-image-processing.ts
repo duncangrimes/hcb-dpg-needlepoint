@@ -5,6 +5,7 @@ import {
   mapColorsToThreads,
   buildDitheredManufacturerImage,
   applyColorCorrection,
+  checkColorDistinctness,
   type Thread,
   type ThreadWithStitches,
 } from "@/lib/colors";
@@ -467,12 +468,40 @@ export async function processImageForManufacturing(
   const palette = await getThreadPalette();
   const mapped = mapColorsToThreads(centroids, palette);
 
-  const uniqueThreads = mapped.reduce<Thread[]>((acc, { thread }) => {
+  let uniqueThreads = mapped.reduce<Thread[]>((acc, { thread }) => {
     if (!acc.some((item) => item.floss === thread.floss)) {
       acc.push(thread);
     }
     return acc;
   }, []);
+
+  // Check color distinctness — merge threads that are too similar to tell apart
+  const { distinctThreads, mergedCount } = checkColorDistinctness(uniqueThreads);
+  if (mergedCount > 0) {
+    uniqueThreads = distinctThreads;
+    // Re-map: update mapped palette to use the surviving threads
+    // Threads that were merged need their pixels reassigned to the nearest surviving thread
+    const survivingFlosses = new Set(uniqueThreads.map(t => t.floss));
+    for (const mapping of mapped) {
+      if (!survivingFlosses.has(mapping.thread.floss)) {
+        // This thread was merged — find the nearest surviving thread
+        const toOklab = (await import("culori")).converter("oklab");
+        const colorDiff = (await import("culori")).differenceEuclidean("oklab");
+        const removedLab = toOklab({ r: mapping.thread.r / 255, g: mapping.thread.g / 255, b: mapping.thread.b / 255, mode: "rgb" });
+        let bestThread = uniqueThreads[0];
+        let bestDist = Infinity;
+        for (const t of uniqueThreads) {
+          const tLab = toOklab({ r: t.r / 255, g: t.g / 255, b: t.b / 255, mode: "rgb" });
+          const d = colorDiff(removedLab, tLab);
+          if (d < bestDist) {
+            bestDist = d;
+            bestThread = t;
+          }
+        }
+        mapping.thread = bestThread;
+      }
+    }
+  }
 
   // Build manufacturer image using dithered approach for pixel-accurate stitch mapping
   console.log(

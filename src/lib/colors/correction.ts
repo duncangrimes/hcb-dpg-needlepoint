@@ -40,7 +40,7 @@ export async function autoWhiteBalance(imageBuffer: Buffer): Promise<Buffer> {
   // Sharp's modulate works in HSV space, so we need to convert our RGB corrections
   // For subtle corrections, we'll use hue rotation and saturation adjustments
   const hueShift = 0; // No hue shift for gray world correction
-  const saturationBoost = 1.02; // Very slight boost to maintain vibrancy
+  const saturationBoost = 1.0; // No saturation boost here — consolidated to resize step
   
   // Calculate brightness adjustments for each channel (more conservative)
   const brightnessAdjustment = (rScale + gScale + bScale) / 3;
@@ -65,7 +65,7 @@ export async function processInLABColorSpace(imageBuffer: Buffer): Promise<Buffe
     .toColourspace('lab')  // Convert to LAB color space
     .modulate({
       brightness: 1.01,    // Very subtle lightness adjustment
-      saturation: 1.03,   // Minimal color channel adjustment
+      saturation: 1.0,    // No saturation boost — consolidated to resize step
       hue: 0             // No hue shift in LAB
     })
     .toColourspace('srgb') // Convert back to sRGB

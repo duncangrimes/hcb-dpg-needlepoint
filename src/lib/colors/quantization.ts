@@ -6,12 +6,8 @@ import type { RepresentativeColorsResult } from "@/lib/colors/types";
 
 // Median-cut palette quantization for better color fidelity and shape preservation
 export async function getRepresentativeColorsMedianCut(imageBuffer: Buffer, k: number): Promise<RepresentativeColorsResult> {
-  // Moderate saturation boost for bright needlepoint results
-  const enhancedBuffer = await sharp(imageBuffer)
-    .modulate({ saturation: 1.6, brightness: 1.05 }) // balanced saturation boost + slight brightness
-    .toBuffer();
-
-  const { data: pixelBuffer, info } = await sharp(enhancedBuffer)
+  // No saturation boost here — consolidated to single boost in resize step
+  const { data: pixelBuffer, info } = await sharp(imageBuffer)
     .ensureAlpha()
     .removeAlpha()
     .raw()
@@ -25,28 +21,10 @@ export async function getRepresentativeColorsMedianCut(imageBuffer: Buffer, k: n
   // Build palette using median-cut
   const palette = await IQ.buildPalette([pointContainer], { colors: k });
   
-  // Get palette colors and enhance them for vibrancy
+  // Get palette colors directly — no additional saturation enhancement
   const paletteColors = palette.getPointContainer().getPointArray();
   const centroids = paletteColors.map((pt: { r: number; g: number; b: number }) => {
-    // Enhance color vibrancy by boosting saturation
-    const [r, g, b] = [pt.r, pt.g, pt.b];
-    const max = Math.max(r, g, b);
-    const min = Math.min(r, g, b);
-    const saturation = max === 0 ? 0 : (max - min) / max;
-    
-    // Moderate saturation boost for bright needlepoint results
-    const enhancedSaturation = Math.min(1, saturation * 1.4);
-    const delta = max - min;
-    const newDelta = enhancedSaturation * max;
-    
-    if (delta === 0) return [r, g, b]; // grayscale, no change
-    
-    const factor = newDelta / delta;
-    const newR = Math.min(255, Math.max(0, r + (r - min) * (factor - 1)));
-    const newG = Math.min(255, Math.max(0, g + (g - min) * (factor - 1)));
-    const newB = Math.min(255, Math.max(0, b + (b - min) * (factor - 1)));
-    
-    return [Math.round(newR), Math.round(newG), Math.round(newB)];
+    return [Math.round(pt.r), Math.round(pt.g), Math.round(pt.b)];
   });
 
   console.log(`📊 Median-cut completed: ${centroids.length} colors found`);
@@ -78,12 +56,10 @@ export async function getRepresentativeColorsMedianCut(imageBuffer: Buffer, k: n
 
 // Wu's variance-minimization quantizer for smoother color transitions and reduced pixelation
 export async function getRepresentativeColorsWu(imageBuffer: Buffer, k: number): Promise<RepresentativeColorsResult> {
-  // Moderate saturation boost for bright needlepoint results
-  const enhancedBuffer = await sharp(imageBuffer)
-    .modulate({ saturation: 1.6, brightness: 1.05 }) // balanced saturation boost + slight brightness
-    .toBuffer();
-
-  const { data: pixelBuffer, info } = await sharp(enhancedBuffer)
+  // No saturation boost here — consolidated to a single boost in the resize step
+  // (previously this stage added 1.6x saturation + 1.4x centroid enhancement,
+  // compounding with the resize step's 1.3x to produce ~3x total over-saturation)
+  const { data: pixelBuffer, info } = await sharp(imageBuffer)
     .ensureAlpha()
     .removeAlpha()
     .raw()
@@ -100,28 +76,10 @@ export async function getRepresentativeColorsWu(imageBuffer: Buffer, k: number):
     paletteQuantization: 'wuquant' // Use Wu's quantizer instead of median-cut
   });
   
-  // Get palette colors and enhance them for vibrancy
+  // Get palette colors directly — no additional saturation enhancement
   const paletteColors = palette.getPointContainer().getPointArray();
   const centroids = paletteColors.map((pt: { r: number; g: number; b: number }) => {
-    // Enhance color vibrancy by boosting saturation
-    const [r, g, b] = [pt.r, pt.g, pt.b];
-    const max = Math.max(r, g, b);
-    const min = Math.min(r, g, b);
-    const saturation = max === 0 ? 0 : (max - min) / max;
-    
-    // Moderate saturation boost for bright needlepoint results
-    const enhancedSaturation = Math.min(1, saturation * 1.4);
-    const delta = max - min;
-    const newDelta = enhancedSaturation * max;
-    
-    if (delta === 0) return [r, g, b]; // grayscale, no change
-    
-    const factor = newDelta / delta;
-    const newR = Math.min(255, Math.max(0, r + (r - min) * (factor - 1)));
-    const newG = Math.min(255, Math.max(0, g + (g - min) * (factor - 1)));
-    const newB = Math.min(255, Math.max(0, b + (b - min) * (factor - 1)));
-    
-    return [Math.round(newR), Math.round(newG), Math.round(newB)];
+    return [Math.round(pt.r), Math.round(pt.g), Math.round(pt.b)];
   });
 
   console.log(`📊 Wu's quantizer completed: ${centroids.length} colors found`);
@@ -160,8 +118,8 @@ export async function getRepresentativeColors(
 ): Promise<RepresentativeColorsResult> {
   let bufferToUse = imageBuffer;
   if (boostSaturation) {
-    // Moderate saturation boost for bright needlepoint results
-    bufferToUse = await sharp(imageBuffer).modulate({ saturation: 1.5, brightness: 1.05 }).toBuffer();
+    // Light saturation boost if explicitly requested (not default path)
+    bufferToUse = await sharp(imageBuffer).modulate({ saturation: 1.15, brightness: 1.02 }).toBuffer();
   }
   const { data: pixelBuffer, info } = await sharp(bufferToUse)
     .blur(0.5)

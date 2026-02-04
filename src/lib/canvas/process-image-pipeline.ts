@@ -4,7 +4,7 @@ import {
   resizeImageForNeedlepoint,
   processImageForManufacturing,
 } from "@/lib/upload/manufacturer-image-processing";
-import { applyColorCorrection } from "@/lib/colors";
+import { applyColorCorrection, enforceColorLimits } from "@/lib/colors";
 import type { Thread } from "@/lib/colors";
 
 export interface CanvasConfig {
@@ -33,27 +33,30 @@ export async function processImagePipeline(
   // 1. Extract image metadata
   const metadata = await extractImageMetadata(rawBuffer);
   
-  // 2. Calculate stitch dimensions based on canvas width and mesh count
+  // 2. Enforce size-based color limits
+  const numColors = enforceColorLimits(config.numColors, config.width);
+  
+  // 3. Calculate stitch dimensions based on canvas width and mesh count
   const { widthInStitches, heightInStitches } = calculateStitchDimensions(
     config.width,
     config.meshCount,
     metadata.aspectRatio
   );
   
-  // 3. Resize image for needlepoint
+  // 4. Resize image for needlepoint
   const resized = await resizeImageForNeedlepoint(
     rawBuffer,
     widthInStitches,
     heightInStitches
   );
   
-  // 4. Apply color correction
+  // 5. Apply color correction
   const corrected = await applyColorCorrection(resized);
   
-  // 5. Process image for manufacturing (quantization, dithering, thread mapping, majority filtering)
+  // 6. Process image for manufacturing (quantization, dithering, thread mapping, majority filtering)
   const { manufacturerImageBuffer, threads: threadsWithStitches, stitchabilityScore } = await processImageForManufacturing(
     corrected,
-    config.numColors
+    numColors
   );
 
   console.log(`📊 Stitchability score: ${stitchabilityScore.toFixed(2)} (higher = better)`);
