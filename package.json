@@ -22,6 +22,7 @@
     "@google/genai": "^1.28.0",
     "@headlessui/react": "^2.2.8",
     "@heroicons/react": "^2.2.0",
+    "@imgly/background-removal-node": "^1.4.5",
     "@prisma/client": "^6.16.2",
     "@types/culori": "^4.0.1",
     "@types/skmeans": "^0.11.8",
