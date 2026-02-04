@@ -74,12 +74,19 @@ export const COLOR_LIMITS_CONFIG = {
 /**
  * Color Distinctness Configuration
  * Ensures palette colors are distinguishable by stitchers.
+ * Uses OKLab Euclidean distance (scale ~0-1.4, NOT CIEDE2000's 0-100 scale).
+ * 
+ * OKLab reference:
+ *   <0.02 = nearly identical
+ *   0.02-0.05 = very similar  
+ *   0.05-0.10 = noticeably different
+ *   >0.10 = clearly different
  */
 export const COLOR_DISTINCTNESS_CONFIG = {
-  /** Minimum CIEDE2000 delta-E between any two palette colors */
-  minDeltaE: 8,
+  /** Minimum OKLab Euclidean distance between any two palette colors */
+  minDeltaE: 0.06,
   /** Preferred minimum for adjacent regions */
-  preferredMinDeltaE: 12,
+  preferredMinDeltaE: 0.10,
 } as const;
 
 /**

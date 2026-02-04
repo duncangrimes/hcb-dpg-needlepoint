@@ -191,13 +191,32 @@ export async function processImagePipelineV2(
 
   // --- Step 10: Composite ---
   console.log(`\n🖼️ Step 10: Composite canvas...`);
-  // Add alpha to cleaned subject using the resized mask
-  const subjectWithAlpha = await sharp(cleanedSubject)
+  // Add alpha to cleaned subject using the resized mask.
+  // First ensure both are the same dimensions, then combine channel-by-channel.
+  const cleanedResized = await sharp(cleanedSubject)
     .resize(targetSubjectW, targetSubjectH, { fit: "fill" })
-    .joinChannel(
-      await sharp(resizedMask).greyscale().toBuffer(),
-      { raw: { width: targetSubjectW, height: targetSubjectH, channels: 1 } }
-    )
+    .removeAlpha()
+    .raw()
+    .toBuffer();
+
+  const maskRaw = await sharp(resizedMask)
+    .resize(targetSubjectW, targetSubjectH, { fit: "fill" })
+    .greyscale()
+    .raw()
+    .toBuffer();
+
+  // Build RGBA buffer manually
+  const rgbaData = Buffer.alloc(targetSubjectW * targetSubjectH * 4);
+  for (let i = 0; i < targetSubjectW * targetSubjectH; i++) {
+    rgbaData[i * 4] = cleanedResized[i * 3];
+    rgbaData[i * 4 + 1] = cleanedResized[i * 3 + 1];
+    rgbaData[i * 4 + 2] = cleanedResized[i * 3 + 2];
+    rgbaData[i * 4 + 3] = maskRaw[i]; // Alpha from mask
+  }
+
+  const subjectWithAlpha = await sharp(rgbaData, {
+    raw: { width: targetSubjectW, height: targetSubjectH, channels: 4 },
+  })
     .png()
     .toBuffer();
 
