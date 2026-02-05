@@ -1,17 +1,18 @@
 /**
- * Test script: Process an image through both V1 and V2 pipelines and compare.
+ * Test script: Process an image through V1, V2, and V2+Vision pipelines.
  *
  * Usage:
- *   npx tsx scripts/test-pipeline.ts <image-path> [canvas-width-inches] [mesh-count] [num-colors]
+ *   npx tsx scripts/test-pipeline.ts <image-path> [canvas-width-inches] [mesh-count] [num-colors] [--vision]
  *
- * Example:
+ * Examples:
  *   npx tsx scripts/test-pipeline.ts test-photo.jpg 8 13 12
+ *   npx tsx scripts/test-pipeline.ts test-photo.jpg 8 13 12 --vision
  *
  * Output:
- *   test-output/v1-manufacturer.png  — V1 pipeline output
- *   test-output/v2-manufacturer.png  — V2 pipeline output
- *   test-output/v2-mask.png          — Subject isolation mask
- *   test-output/v2-background.png    — Generated background
+ *   test-output/v1-manufacturer.png    — V1 pipeline output
+ *   test-output/v2-manufacturer.png    — V2 pipeline output
+ *   test-output/v2-vision-manufacturer.png — V2 + Vision palette output (if --vision)
+ *   test-output/v2-mask.png            — Subject isolation mask
  */
 
 import fs from "fs";
@@ -28,14 +29,18 @@ tsConfigPaths.register({
 async function main() {
   const args = process.argv.slice(2);
   if (args.length < 1) {
-    console.error("Usage: npx tsx scripts/test-pipeline.ts <image-path> [width] [mesh] [colors]");
+    console.error("Usage: npx tsx scripts/test-pipeline.ts <image-path> [width] [mesh] [colors] [--vision]");
     process.exit(1);
   }
 
-  const imagePath = args[0];
-  const canvasWidth = parseFloat(args[1] || "8");
-  const meshCount = parseInt(args[2] || "13");
-  const numColors = parseInt(args[3] || "12");
+  // Parse args (filter out flags)
+  const nonFlagArgs = args.filter(a => !a.startsWith("--"));
+  const useVision = args.includes("--vision");
+  
+  const imagePath = nonFlagArgs[0];
+  const canvasWidth = parseFloat(nonFlagArgs[1] || "8");
+  const meshCount = parseInt(nonFlagArgs[2] || "13");
+  const numColors = parseInt(nonFlagArgs[3] || "12");
 
   if (!fs.existsSync(imagePath)) {
     console.error(`File not found: ${imagePath}`);
@@ -98,12 +103,56 @@ async function main() {
   console.log(`   Stitchability: ${v2Result.stitchabilityScore.toFixed(2)}`);
   console.log(`   Mask: ${maskPath}`);
 
+  // --- V2 + Vision Pipeline (if --vision flag) ---
+  let v2VisionResult: typeof v2Result | null = null;
+  let v2VisionTime = 0;
+  
+  if (useVision) {
+    console.log("\n═══ V2 + VISION PIPELINE ═══\n");
+    const v2VisionStart = Date.now();
+    v2VisionResult = await processImagePipelineV2(rawBuffer, {
+      width: canvasWidth,
+      meshCount,
+      numColors,
+      background: {
+        pattern: "gingham",
+        color1: [200, 160, 180],
+        color2: [255, 255, 255],
+        patternSize: 4,
+      },
+      outlineColor: [30, 30, 30],
+      outlineWidth: 1,
+      subjectScale: 0.55,
+      flattenStrength: "medium",
+      minRegionSize: 6,
+      useVisionPalette: true,
+    });
+    v2VisionTime = Date.now() - v2VisionStart;
+
+    const v2VisionPath = path.join(outDir, "v2-vision-manufacturer.png");
+    fs.writeFileSync(v2VisionPath, v2VisionResult.manufacturerImageBuffer);
+
+    console.log(`\n✅ V2+Vision done in ${(v2VisionTime / 1000).toFixed(1)}s → ${v2VisionPath}`);
+    console.log(`   Threads: ${v2VisionResult.threads.length}`);
+    console.log(`   Stitchability: ${v2VisionResult.stitchabilityScore.toFixed(2)}`);
+    if (v2VisionResult.visionAnalysis) {
+      console.log(`   AI Analysis: "${v2VisionResult.visionAnalysis.subject_description}"`);
+      console.log(`   AI Notes: ${v2VisionResult.visionAnalysis.notes}`);
+    }
+  }
+
   // --- Comparison ---
   console.log("\n═══ COMPARISON ═══\n");
   const v1Meta = await sharp(v1Result.manufacturerImageBuffer).metadata();
   const v2Meta = await sharp(v2Result.manufacturerImageBuffer).metadata();
   console.log(`V1: ${v1Meta.width}×${v1Meta.height}, ${v1Result.threads.length} threads, ${(v1Time / 1000).toFixed(1)}s`);
   console.log(`V2: ${v2Meta.width}×${v2Meta.height}, ${v2Result.threads.length} threads, ${(v2Time / 1000).toFixed(1)}s`);
+  
+  if (v2VisionResult) {
+    const v2VisionMeta = await sharp(v2VisionResult.manufacturerImageBuffer).metadata();
+    console.log(`V2+Vision: ${v2VisionMeta.width}×${v2VisionMeta.height}, ${v2VisionResult.threads.length} threads, ${(v2VisionTime / 1000).toFixed(1)}s`);
+  }
+  
   console.log(`\nOutputs saved to ${outDir}/`);
 }
 

@@ -4,6 +4,8 @@ import {
   calculateStitchDimensions,
   resizeImageForNeedlepoint,
   processImageForManufacturing,
+  applyMajorityFilter,
+  calculateStitchabilityScore,
 } from "@/lib/upload/manufacturer-image-processing";
 import {
   applyColorCorrection,
@@ -21,6 +23,7 @@ import {
   generateOutline,
 } from "@/lib/simplification";
 import { compositeCanvas } from "@/lib/compositor";
+import { quantizeWithVisionGuidance } from "@/lib/vision";
 
 export interface CanvasConfigV2 {
   /** Canvas width in inches */
@@ -41,6 +44,8 @@ export interface CanvasConfigV2 {
   flattenStrength?: "light" | "medium" | "heavy";
   /** Minimum region size for confetti cleanup (default: 6) */
   minRegionSize?: number;
+  /** Use AI vision to guide color palette selection (default: false) */
+  useVisionPalette?: boolean;
 }
 
 export interface ProcessedImageResultV2 {
@@ -56,6 +61,11 @@ export interface ProcessedImageResultV2 {
   dimensions: {
     widthInStitches: number;
     heightInStitches: number;
+  };
+  /** Vision analysis results (if useVisionPalette was enabled) */
+  visionAnalysis?: {
+    subject_description: string;
+    notes: string;
   };
 }
 
@@ -89,7 +99,11 @@ export async function processImagePipelineV2(
     subjectScale = 0.55,
     flattenStrength = "medium",
     minRegionSize = 6,
+    useVisionPalette = false,
   } = config;
+  
+  // Track vision analysis if enabled
+  let visionAnalysis: { subject_description: string; notes: string } | undefined;
 
   // Enforce color limits based on canvas size
   const numColors = enforceColorLimits(config.numColors, canvasWidthInches);
@@ -134,14 +148,38 @@ export async function processImagePipelineV2(
 
   // --- Step 6: Quantize subject + map to threads ---
   // Reserve 1-2 colors for background, 1 for outline
-  // Use flat quantization (no dithering) for cleaner results
   const subjectColors = Math.max(4, numColors - 3);
-  console.log(`\n🧶 Step 6: Quantize subject to ${subjectColors} colors (flat, no dithering)...`);
-  const {
-    manufacturerImageBuffer: subjectQuantized,
-    threads: subjectThreads,
-    stitchabilityScore: subjectStitchabilityScore,
-  } = await processImageForManufacturing(corrected, subjectColors, { useDithering: false });
+  
+  let subjectQuantized: Buffer;
+  let subjectThreads: Thread[]; // Will be converted from ThreadWithStitches if needed
+  let subjectStitchabilityScore: number;
+  
+  if (useVisionPalette) {
+    // Use AI vision to guide color palette selection
+    console.log(`\n🤖 Step 6: Vision-guided quantization (${subjectColors} colors)...`);
+    const visionResult = await quantizeWithVisionGuidance(corrected, subjectColors);
+    
+    subjectQuantized = visionResult.quantizedBuffer;
+    subjectThreads = visionResult.threads;
+    visionAnalysis = visionResult.analysis;
+    
+    // Apply majority filter to vision-quantized image
+    subjectQuantized = await applyMajorityFilter(subjectQuantized);
+    
+    // Calculate stitchability score
+    subjectStitchabilityScore = await calculateStitchabilityScore(subjectQuantized);
+    
+    console.log(`📝 AI identified: "${visionAnalysis.subject_description}"`);
+  } else {
+    // Standard quantization (flat, no dithering)
+    console.log(`\n🧶 Step 6: Quantize subject to ${subjectColors} colors (flat, no dithering)...`);
+    const result = await processImageForManufacturing(corrected, subjectColors, { useDithering: false });
+    
+    subjectQuantized = result.manufacturerImageBuffer;
+    // Strip stitches property to get Thread[]
+    subjectThreads = result.threads.map(({ stitches, ...thread }) => thread);
+    subjectStitchabilityScore = result.stitchabilityScore;
+  }
 
   // --- Step 7: Connected-component cleanup on subject ---
   console.log(`\n🧹 Step 7: Connected-component cleanup (min region: ${minRegionSize})...`);
@@ -237,7 +275,7 @@ export async function processImagePipelineV2(
   console.log(`\n📊 Step 11: Reporting subject stitchability...`);
 
   // Build final thread list (subject threads + outline + background colors)
-  const allThreads: Thread[] = [...subjectThreads.map(({ stitches, ...t }) => t)];
+  const allThreads: Thread[] = [...subjectThreads];
 
   console.log(`\n🧵 ═══ V2 PIPELINE COMPLETE ═══`);
   console.log(`📊 Subject stitchability score: ${subjectStitchabilityScore.toFixed(2)} (background not scored)`);
@@ -252,5 +290,6 @@ export async function processImagePipelineV2(
       widthInStitches,
       heightInStitches,
     },
+    visionAnalysis,
   };
 }
