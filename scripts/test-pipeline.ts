@@ -18,6 +18,10 @@
 import fs from "fs";
 import path from "path";
 import sharp from "sharp";
+import dotenv from "dotenv";
+
+// Load environment variables from .env.local
+dotenv.config({ path: path.resolve(__dirname, "..", ".env.local") });
 
 // Resolve TS paths manually since we're running outside Next.js
 const tsConfigPaths = require("tsconfig-paths");
