@@ -239,14 +239,16 @@ The needlepoint/cross-stitch market is valued at $1.2B+ globally, with growing d
 │    "Turn Your Photos Into Custom Needlepoint"                  │
 │                                                                 │
 │              ┌─────────────────────┐                           │
-│              │   Upload Photo 📷   │                           │
+│              │   📷 Take Photo     │                           │
 │              └─────────────────────┘                           │
-│                   or take a photo                               │
+│              ┌─────────────────────┐                           │
+│              │   🖼️ Choose Photo   │                           │
+│              └─────────────────────┘                           │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                      SELECTION SCREEN                           │
+│                      CUTOUT SCREEN                              │
 │  ┌───────────────────────────────────────────────────────────┐ │
 │  │                                                           │ │
 │  │                    [Source Photo]                         │ │
@@ -260,12 +262,12 @@ The needlepoint/cross-stitch market is valued at $1.2B+ globally, with growing d
 │  │Lasso│ │Undo │ │Redo │                    └────────────────┘ │
 │  └─────┘ └─────┘ └─────┘                                       │
 │                                                                 │
-│  Selections: [🐕 Dog] [🍷 Wine Glass]  [+ Add More]           │
+│  Cutouts: [🐕 Dog] [🍷 Wine Glass]  [+ Add More]              │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                     COMPOSITION SCREEN                          │
+│                      CANVAS SCREEN                              │
 │  ┌───────────────────────────────────────────────────────────┐ │
 │  │              ╔═══════════════════════╗                    │ │
 │  │              ║                       ║                    │ │
@@ -471,9 +473,10 @@ interface EditorState {
   sourceImages: SourceImage[];
   activeSourceId: string | null;
   
-  // Selections
-  selections: Selection[];
-  activeSelectionId: string | null;
+  // Cutouts (lasso'd regions)
+  cutouts: Cutout[];
+  placedCutouts: PlacedCutout[];  // Cutouts arranged on canvas
+  activeCutoutId: string | null;
   
   // Drawing state
   tool: 'lasso' | 'select' | 'pan';
@@ -490,9 +493,9 @@ interface EditorState {
   continueDrawing: (point: Point) => void;
   finishDrawing: () => void;
   cancelDrawing: () => void;
-  selectSelection: (id: string | null) => void;
-  updateSelectionTransform: (id: string, transform: Partial<Transform>) => void;
-  deleteSelection: (id: string) => void;
+  selectCutout: (id: string | null) => void;
+  updateCutoutTransform: (id: string, transform: Partial<Transform>) => void;
+  deleteCutout: (id: string) => void;
   setCanvasConfig: (config: Partial<CanvasConfig>) => void;
 }
 
@@ -502,8 +505,9 @@ export const useEditorStore = create<EditorState>()(
       // Initial state
       sourceImages: [],
       activeSourceId: null,
-      selections: [],
-      activeSelectionId: null,
+      cutouts: [],
+      placedCutouts: [],
+      activeCutoutId: null,
       tool: 'lasso',
       isDrawing: false,
       currentPath: [],
@@ -533,14 +537,20 @@ export const useEditorStore = create<EditorState>()(
       
       finishDrawing: () => set((state) => {
         if (state.currentPath.length > 2) {
-          const newSelection: Selection = {
+          const newCutout: Cutout = {
             id: crypto.randomUUID(),
             sourceImageId: state.activeSourceId!,
             path: [...state.currentPath],
-            transform: { x: 0, y: 0, scale: 1, rotation: 0 },
-            zIndex: state.selections.length,
           };
-          state.selections.push(newSelection);
+          state.cutouts.push(newCutout);
+          
+          // Auto-place on canvas
+          state.placedCutouts.push({
+            cutoutId: newCutout.id,
+            cutout: newCutout,
+            transform: { x: 0, y: 0, scale: 1, rotation: 0, flipX: false, flipY: false },
+            zIndex: state.placedCutouts.length,
+          });
         }
         state.isDrawing = false;
         state.currentPath = [];
@@ -635,7 +645,16 @@ export function EditorCanvas() {
 
 ## 8. Data Models
 
-### 8.1 Database Schema (Prisma)
+### 8.1 Core Concepts
+
+| Concept | Description |
+|---------|-------------|
+| **Cutout** | A lasso'd region from a source photo |
+| **Canvas** | The final needlepoint output with arranged cutouts |
+
+No projects — keep it simple. Users create cutouts, arrange them, generate canvases.
+
+### 8.2 Database Schema (Prisma)
 
 ```prisma
 // prisma/schema.prisma
@@ -644,72 +663,80 @@ model User {
   id        String    @id @default(cuid())
   email     String    @unique
   name      String?
-  projects  Project[]
+  cutouts   Cutout[]
+  canvases  Canvas[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 }
 
-model Project {
-  id          String    @id @default(cuid())
-  name        String
-  user        User      @relation(fields: [userId], references: [id])
-  userId      String
-  sourceImages SourceImage[]
-  compositions Composition[]
-  canvases    Canvas[]
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-}
-
 model SourceImage {
   id        String    @id @default(cuid())
-  project   Project   @relation(fields: [projectId], references: [id])
-  projectId String
+  user      User      @relation(fields: [userId], references: [id])
+  userId    String
   url       String    // Vercel Blob URL
   width     Int
   height    Int
-  selections Selection[]
+  cutouts   Cutout[]
   createdAt DateTime  @default(now())
 }
 
-model Selection {
+model Cutout {
   id            String      @id @default(cuid())
+  user          User        @relation(fields: [userId], references: [id])
+  userId        String
   sourceImage   SourceImage @relation(fields: [sourceImageId], references: [id])
   sourceImageId String
-  composition   Composition @relation(fields: [compositionId], references: [id])
-  compositionId String
-  path          Json        // Array of {x, y} points
-  transform     Json        // {x, y, scale, rotation, flipX, flipY}
-  zIndex        Int
+  path          Json        // Array of {x, y} points (lasso path)
+  name          String?     // Optional user label ("dog", "wine glass")
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
+  
+  // Cutouts can be reused across multiple canvases
+  canvasCutouts CanvasCutout[]
 }
 
-model Composition {
-  id          String      @id @default(cuid())
-  project     Project     @relation(fields: [projectId], references: [id])
-  projectId   String
-  selections  Selection[]
-  canvasConfig Json       // {widthInches, heightInches, meshCount, background}
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+// Join table: a cutout placed on a canvas with transform
+model CanvasCutout {
+  id        String   @id @default(cuid())
+  canvas    Canvas   @relation(fields: [canvasId], references: [id])
+  canvasId  String
+  cutout    Cutout   @relation(fields: [cutoutId], references: [id])
+  cutoutId  String
+  transform Json     // {x, y, scale, rotation, flipX, flipY}
+  zIndex    Int
+  
+  @@unique([canvasId, cutoutId])
 }
 
 model Canvas {
-  id              String    @id @default(cuid())
-  project         Project   @relation(fields: [projectId], references: [id])
-  projectId       String
-  compositionId   String?
-  manufacturerUrl String    // Final processed image
-  threads         Json      // Array of thread colors
-  stitchability   Float
-  widthStitches   Int
-  heightStitches  Int
-  createdAt       DateTime  @default(now())
+  id              String         @id @default(cuid())
+  user            User           @relation(fields: [userId], references: [id])
+  userId          String
+  name            String?
+  config          Json           // {widthInches, heightInches, meshCount, background}
+  cutouts         CanvasCutout[]
+  
+  // Generated output (null until processed)
+  manufacturerUrl String?
+  threads         Json?          // Array of thread colors
+  stitchability   Float?
+  widthStitches   Int?
+  heightStitches  Int?
+  
+  status          CanvasStatus   @default(DRAFT)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+}
+
+enum CanvasStatus {
+  DRAFT       // Being edited
+  PROCESSING  // Generating needlepoint
+  COMPLETE    // Ready to download
+  FAILED      // Processing error
 }
 ```
 
-### 8.2 TypeScript Types
+### 8.3 TypeScript Types
 
 ```typescript
 // types/editor.ts
@@ -728,10 +755,18 @@ export interface Transform {
   flipY: boolean;
 }
 
-export interface Selection {
+// A lasso'd region from a source photo
+export interface Cutout {
   id: string;
   sourceImageId: string;
-  path: Point[];
+  path: Point[];          // Lasso vertices
+  name?: string;          // User label
+}
+
+// A cutout placed on a canvas with positioning
+export interface PlacedCutout {
+  cutoutId: string;
+  cutout: Cutout;
   transform: Transform;
   zIndex: number;
 }
@@ -741,7 +776,7 @@ export interface SourceImage {
   url: string;
   width: number;
   height: number;
-  element?: HTMLImageElement;  // Loaded image element
+  element?: HTMLImageElement;  // Loaded image element (client-side)
 }
 
 export interface CanvasConfig {
@@ -769,14 +804,22 @@ export interface Thread {
   percentage?: number;
 }
 
-export interface ProcessedCanvas {
-  manufacturerImageUrl: string;
-  threads: Thread[];
-  stitchabilityScore: number;
-  dimensions: {
+// The final needlepoint canvas
+export interface Canvas {
+  id: string;
+  name?: string;
+  config: CanvasConfig;
+  cutouts: PlacedCutout[];
+  
+  // Generated output (null until processed)
+  manufacturerUrl?: string;
+  threads?: Thread[];
+  stitchabilityScore?: number;
+  dimensions?: {
     widthInStitches: number;
     heightInStitches: number;
   };
+  status: 'draft' | 'processing' | 'complete' | 'failed';
 }
 ```
 
@@ -794,7 +837,6 @@ Upload a source image.
 // FormData
 {
   file: File,           // Image file
-  projectId?: string,   // Optional, creates new if not provided
 }
 ```
 
@@ -808,29 +850,63 @@ Upload a source image.
     width: number,
     height: number,
   },
-  projectId: string,
 }
 ```
 
-#### POST /api/process
-Process a composition into a needlepoint canvas.
+#### POST /api/cutouts
+Save a cutout (lasso'd region).
 
 **Request:**
 ```typescript
 {
-  compositionId: string,
-  // OR inline composition:
-  composition: {
-    selections: Array<{
-      sourceImageId: string,
-      path: Point[],
-      transform: Transform,
-      zIndex: number,
-    }>,
-    canvasConfig: CanvasConfig,
-  }
+  sourceImageId: string,
+  path: Point[],        // Lasso vertices
+  name?: string,        // Optional label
 }
 ```
+
+**Response:**
+```typescript
+{
+  success: boolean,
+  cutout: {
+    id: string,
+    sourceImageId: string,
+    path: Point[],
+    name?: string,
+  },
+}
+```
+
+#### POST /api/canvases
+Create a new canvas (draft).
+
+**Request:**
+```typescript
+{
+  name?: string,
+  config: CanvasConfig,
+  cutouts: Array<{
+    cutoutId: string,
+    transform: Transform,
+    zIndex: number,
+  }>,
+}
+```
+
+**Response:**
+```typescript
+{
+  success: boolean,
+  canvas: {
+    id: string,
+    status: 'draft',
+  },
+}
+```
+
+#### POST /api/canvases/[id]/generate
+Process a canvas into needlepoint.
 
 **Response:**
 ```typescript
@@ -845,21 +921,19 @@ Process a composition into a needlepoint canvas.
       widthInStitches: number,
       heightInStitches: number,
     },
+    status: 'complete',
   },
 }
 ```
 
-#### GET /api/projects
-List user's projects.
+#### GET /api/canvases
+List user's canvases.
 
-#### GET /api/projects/[id]
-Get project details with compositions and canvases.
+#### GET /api/canvases/[id]
+Get canvas details.
 
-#### POST /api/compositions
-Save a composition (work in progress).
-
-#### PUT /api/compositions/[id]
-Update a composition.
+#### GET /api/cutouts
+List user's saved cutouts (for reuse).
 
 ---
 
@@ -1257,14 +1331,14 @@ Interpretation:
 
 | Term | Definition |
 |------|------------|
-| **Canvas** | The final needlepoint design output |
-| **Composition** | Arrangement of selections before processing |
+| **Canvas** | The final needlepoint design with arranged cutouts |
+| **Cutout** | A lasso'd region from a source photo |
 | **DMC** | Brand of embroidery thread, industry standard |
-| **Lasso** | Freeform selection tool |
+| **Lasso** | Freeform drawing tool to create cutouts |
 | **Manufacturer image** | 1 pixel = 1 stitch output image |
 | **Mesh count** | Stitches per inch (common: 10, 13, 18) |
-| **Selection** | User-drawn region to include in canvas |
-| **Stitchability** | Ease of stitching a pattern |
+| **Placed cutout** | A cutout positioned on a canvas with transform |
+| **Stitchability** | Ease of stitching a pattern (longer color runs = better) |
 
 ---
 
