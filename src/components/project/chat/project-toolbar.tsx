@@ -29,13 +29,21 @@ export default function ProjectToolbar({
   onConfirmConvert: () => void;
   onSendPrompt: (prompt: string) => void;
 }) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const libraryInputRef = useRef<HTMLInputElement>(null);
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
   const [prompt, setPrompt] = useState("");
 
   useEffect(() => () => {
-    if (inputRef.current) inputRef.current.value = "";
+    if (cameraInputRef.current) cameraInputRef.current.value = "";
+    if (libraryInputRef.current) libraryInputRef.current.value = "";
   }, []);
+
+  const handleFileSelect = (file: File | null) => {
+    if (!file) return onPickFile(null, null);
+    const url = URL.createObjectURL(file);
+    onPickFile(file, url);
+  };
 
   // Auto-resize textarea based on content
   useEffect(() => {
@@ -66,30 +74,47 @@ export default function ProjectToolbar({
   const hasSelectedCanvas = selectedCanvasId !== null;
 
   return (
-    <div className="fixed bottom-0 inset-x-0 border-t border-gray-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/60 dark:bg-gray-900/70 dark:border-white/10">
+    <div className="fixed bottom-0 inset-x-0 border-t border-gray-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/60 dark:bg-gray-900/70 dark:border-white/10 safe-area-inset-bottom">
       <div className="mx-auto max-w-5xl px-4 py-3 flex flex-col md:flex-row gap-4 md:items-end">
         {!hasSelectedCanvas && (
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            {/* Camera capture - opens camera directly on mobile */}
             <button
               type="button"
-              className="rounded-md px-3 py-2 text-sm font-medium bg-gray-100 hover:bg-gray-200 text-gray-900 dark:bg-white/10 dark:hover:bg-white/15 dark:text-white"
+              className="touch-target rounded-md px-3 py-2 text-sm font-medium bg-indigo-100 hover:bg-indigo-200 text-indigo-700 dark:bg-indigo-900/50 dark:hover:bg-indigo-800/50 dark:text-indigo-300"
               disabled={isProcessing}
-              onClick={() => inputRef.current?.click()}
+              onClick={() => cameraInputRef.current?.click()}
+              aria-label="Take photo with camera"
             >
-              Upload
+              <span className="hidden sm:inline">📷 </span>Camera
             </button>
             <input
-              ref={inputRef}
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              disabled={isProcessing}
+              onChange={(e) => handleFileSelect(e.target.files?.[0] ?? null)}
+            />
+            
+            {/* Library picker - opens photo library */}
+            <button
+              type="button"
+              className="touch-target rounded-md px-3 py-2 text-sm font-medium bg-gray-100 hover:bg-gray-200 text-gray-900 dark:bg-white/10 dark:hover:bg-white/15 dark:text-white"
+              disabled={isProcessing}
+              onClick={() => libraryInputRef.current?.click()}
+              aria-label="Choose from photo library"
+            >
+              <span className="hidden sm:inline">🖼️ </span>Library
+            </button>
+            <input
+              ref={libraryInputRef}
               type="file"
               accept="image/*"
               className="hidden"
               disabled={isProcessing}
-              onChange={(e) => {
-                const file = e.target.files?.[0] ?? null;
-                if (!file) return onPickFile(null, null);
-                const url = URL.createObjectURL(file);
-                onPickFile(file, url);
-              }}
+              onChange={(e) => handleFileSelect(e.target.files?.[0] ?? null)}
             />
           </div>
         )}
