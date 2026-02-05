@@ -134,13 +134,14 @@ export async function processImagePipelineV2(
 
   // --- Step 6: Quantize subject + map to threads ---
   // Reserve 1-2 colors for background, 1 for outline
+  // Use flat quantization (no dithering) for cleaner results
   const subjectColors = Math.max(4, numColors - 3);
-  console.log(`\n🧶 Step 6: Quantize subject to ${subjectColors} colors...`);
+  console.log(`\n🧶 Step 6: Quantize subject to ${subjectColors} colors (flat, no dithering)...`);
   const {
     manufacturerImageBuffer: subjectQuantized,
     threads: subjectThreads,
-    stitchabilityScore: rawScore,
-  } = await processImageForManufacturing(corrected, subjectColors);
+    stitchabilityScore: subjectStitchabilityScore,
+  } = await processImageForManufacturing(corrected, subjectColors, { useDithering: false });
 
   // --- Step 7: Connected-component cleanup on subject ---
   console.log(`\n🧹 Step 7: Connected-component cleanup (min region: ${minRegionSize})...`);
@@ -230,25 +231,22 @@ export async function processImagePipelineV2(
     subjectScale
   );
 
-  // --- Step 11: Final scoring ---
-  console.log(`\n📊 Step 11: Final scoring...`);
-  // Import the scoring function
-  const { calculateStitchabilityScore } = await import(
-    "@/lib/upload/manufacturer-image-processing"
-  );
-  const finalScore = await calculateStitchabilityScore(finalImage);
+  // --- Step 11: Report scoring ---
+  // Use subject's stitchability score (not the composited image)
+  // Background patterns shouldn't impact the score since they're user-chosen
+  console.log(`\n📊 Step 11: Reporting subject stitchability...`);
 
   // Build final thread list (subject threads + outline + background colors)
   const allThreads: Thread[] = [...subjectThreads.map(({ stitches, ...t }) => t)];
 
   console.log(`\n🧵 ═══ V2 PIPELINE COMPLETE ═══`);
-  console.log(`📊 Stitchability score: ${finalScore.toFixed(2)}`);
+  console.log(`📊 Subject stitchability score: ${subjectStitchabilityScore.toFixed(2)} (background not scored)`);
   console.log(`🎨 Colors used: ${allThreads.length} (subject) + background + outline`);
 
   return {
     manufacturerImageBuffer: finalImage,
     threads: allThreads,
-    stitchabilityScore: finalScore,
+    stitchabilityScore: subjectStitchabilityScore, // Score from subject only
     maskBuffer,
     dimensions: {
       widthInStitches,

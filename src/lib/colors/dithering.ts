@@ -162,6 +162,104 @@ export async function buildDitheredManufacturerImage(
  * @param imageBuffer The image buffer to apply anti-aliasing to
  * @returns Anti-aliased image buffer
  */
+/**
+ * Builds a flat-quantized manufacturer image WITHOUT dithering.
+ * Each pixel is mapped to its nearest thread color directly.
+ * This produces cleaner, more stitchable results with solid color regions.
+ * 
+ * @param reducedPngBuffer Input image buffer
+ * @param mappedPalette Thread palette with original colors mapped to threads
+ * @returns Flat-quantized image buffer where each pixel is a discrete thread color
+ */
+export async function buildFlatManufacturerImage(
+  reducedPngBuffer: Buffer,
+  mappedPalette: { original: number[]; thread: Thread }[],
+): Promise<Buffer> {
+  const { data, info } = await sharp(reducedPngBuffer)
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  
+  const { width, height, channels } = info;
+
+  // Normalize to 3-channel RGB buffer
+  let rgbData: Uint8Array;
+  if (channels === 3) {
+    rgbData = data;
+  } else if (channels === 4) {
+    rgbData = new Uint8Array(width * height * 3);
+    for (let i = 0, j = 0; i < data.length; i += 4, j += 3) {
+      rgbData[j] = data[i];
+      rgbData[j + 1] = data[i + 1];
+      rgbData[j + 2] = data[i + 2];
+    }
+  } else if (channels === 1) {
+    rgbData = new Uint8Array(width * height * 3);
+    for (let i = 0, j = 0; i < data.length; i += 1, j += 3) {
+      rgbData[j] = data[i];
+      rgbData[j + 1] = data[i + 1] = data[i + 2] = data[i];
+    }
+  } else {
+    const converted = await sharp(reducedPngBuffer).removeAlpha().toColourspace('srgb').raw().toBuffer({ resolveWithObject: true });
+    rgbData = converted.data;
+  }
+
+  const finalImageData = Buffer.alloc(rgbData.length);
+  const toOklab = converter("oklab");
+  const colorDifference = differenceEuclidean("oklab");
+
+  // Pre-convert thread palette to OKLab
+  const threadPaletteLab = mappedPalette.map(({ thread }) => ({
+    thread,
+    lab: toOklab({ r: thread.r / 255, g: thread.g / 255, b: thread.b / 255, mode: 'rgb' })
+  }));
+
+  console.log(`🎨 Building flat-quantized image (no dithering)...`);
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 3;
+
+      const r = rgbData[i];
+      const g = rgbData[i + 1];
+      const b = rgbData[i + 2];
+      
+      // Convert to OKLab for perceptual matching
+      const currentLab = toOklab({ r: r / 255, g: g / 255, b: b / 255, mode: 'rgb' });
+      
+      // Find nearest thread
+      let closest = threadPaletteLab[0];
+      let minDiff = Infinity;
+
+      for (const p of threadPaletteLab) {
+        const diff = colorDifference(currentLab, p.lab);
+        if (diff < minDiff) {
+          minDiff = diff;
+          closest = p;
+        }
+      }
+      
+      finalImageData[i] = closest.thread.r;
+      finalImageData[i + 1] = closest.thread.g;
+      finalImageData[i + 2] = closest.thread.b;
+    }
+  }
+
+  console.log(`✅ Flat quantization completed`);
+  return sharp(finalImageData, { raw: { width, height, channels: 3 } }).png().toBuffer();
+}
+
+/**
+ * Enhanced anti-aliasing function for post-processing dithered images.
+ * 
+ * @deprecated This function is no longer used in the manufacturing pipeline.
+ * Anti-aliasing introduces blended colors that don't map to discrete thread shades,
+ * which reduces stitchability. This function is kept for potential future use in
+ * generating preview/display images where visual smoothness is prioritized over
+ * manufacturing accuracy.
+ * 
+ * @param imageBuffer The image buffer to apply anti-aliasing to
+ * @returns Anti-aliased image buffer
+ */
 export async function applyEnhancedAntiAliasing(imageBuffer: Buffer): Promise<Buffer> {
   console.log(`🔧 Applying enhanced anti-aliasing...`);
   

@@ -4,6 +4,7 @@ import {
   getThreadPalette,
   mapColorsToThreads,
   buildDitheredManufacturerImage,
+  buildFlatManufacturerImage,
   applyColorCorrection,
   checkColorDistinctness,
   type Thread,
@@ -440,18 +441,26 @@ export async function computeThreadStitches(
   return threadsWithStitches;
 }
 
+export interface ProcessingOptions {
+  /** Whether to use dithering (default: true for v1, false for v2) */
+  useDithering?: boolean;
+}
+
 /**
  * Processes an image through the full needlepoint conversion pipeline.
- * Applies quantization, thread mapping, and dithering to create a pixel-accurate
+ * Applies quantization, thread mapping, and optionally dithering to create a pixel-accurate
  * manufacturer image where each pixel maps directly to a discrete thread color.
  * @param correctedBuffer Color-corrected image buffer
  * @param numColors Number of colors to use in the palette
+ * @param options Processing options (useDithering, etc.)
  * @returns Processed manufacturer image and dimensions
  */
 export async function processImageForManufacturing(
   correctedBuffer: Buffer,
-  numColors: number
+  numColors: number,
+  options: ProcessingOptions = {}
 ): Promise<ManufacturerImageResult> {
+  const { useDithering = true } = options;
   // Get image dimensions for logging
   const metadata = await sharp(correctedBuffer).metadata();
   const imageWidth = metadata.width ?? 0;
@@ -503,14 +512,13 @@ export async function processImageForManufacturing(
     }
   }
 
-  // Build manufacturer image using dithered approach for pixel-accurate stitch mapping
+  // Build manufacturer image using chosen approach
   console.log(
-    `🎨 Building dithered manufacturer image: ${reducedW}×${reducedH} pixels`
+    `🎨 Building ${useDithering ? 'dithered' : 'flat-quantized'} manufacturer image: ${reducedW}×${reducedH} pixels`
   );
-  let manufacturerPngBuffer = await buildDitheredManufacturerImage(
-    correctedBuffer,
-    mapped
-  );
+  let manufacturerPngBuffer = useDithering 
+    ? await buildDitheredManufacturerImage(correctedBuffer, mapped)
+    : await buildFlatManufacturerImage(correctedBuffer, mapped);
 
   // Apply majority filter to remove isolated pixels and small clusters
   manufacturerPngBuffer = await applyMajorityFilter(manufacturerPngBuffer);
