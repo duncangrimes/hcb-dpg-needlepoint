@@ -1,0 +1,297 @@
+"use server";
+
+import sharp from "sharp";
+import {
+  processImageForManufacturing,
+} from "@/lib/upload/manufacturer-image-processing";
+import type { Thread } from "@/lib/colors";
+import { pointInPolygon } from "@/lib/editor/geometry";
+import type { PlacedCutout, CanvasConfig, Point } from "@/types/editor";
+
+export interface GenerateCanvasInput {
+  /** Source images as data URLs keyed by id */
+  sourceImages: Record<string, string>;
+  /** Placed cutouts with paths and transforms */
+  placedCutouts: PlacedCutout[];
+  /** Canvas configuration */
+  canvasConfig: CanvasConfig;
+}
+
+export interface GenerateCanvasResult {
+  success: boolean;
+  /** Manufacturer image as data URL */
+  manufacturerImageUrl?: string;
+  /** Thread list */
+  threads?: Thread[];
+  /** Stitchability score (0-10) */
+  stitchabilityScore?: number;
+  /** Dimensions in stitches */
+  dimensions?: {
+    width: number;
+    height: number;
+  };
+  error?: string;
+}
+
+/**
+ * Generate a needlepoint canvas from placed cutouts
+ */
+export async function generateCanvasAction(
+  input: GenerateCanvasInput
+): Promise<GenerateCanvasResult> {
+  try {
+    const { sourceImages, placedCutouts, canvasConfig } = input;
+
+    // Calculate canvas dimensions in stitches
+    const widthStitches = Math.round(canvasConfig.widthInches * canvasConfig.meshCount);
+    const heightStitches = Math.round(canvasConfig.heightInches * canvasConfig.meshCount);
+
+    // Create the canvas with background
+    let canvas = await createBackgroundCanvas(
+      widthStitches,
+      heightStitches,
+      canvasConfig
+    );
+
+    // Composite each cutout onto the canvas
+    for (const placed of placedCutouts) {
+      const sourceDataUrl = sourceImages[placed.cutout.sourceImageId];
+      if (!sourceDataUrl) continue;
+
+      // Extract and composite the cutout
+      canvas = await compositeCutout(
+        canvas,
+        sourceDataUrl,
+        placed.cutout.path,
+        placed.transform,
+        widthStitches,
+        heightStitches
+      );
+    }
+
+    // Process with the existing manufacturing pipeline
+    const maxColors = 12;
+    const result = await processImageForManufacturing(canvas, maxColors, {
+      useDithering: false, // Flat quantization for needlepoint
+    });
+
+    const threads = result.threads.map((t) => ({
+      floss: t.floss,
+      name: t.name,
+      hex: t.hex,
+      r: t.r,
+      g: t.g,
+      b: t.b,
+    })) as Thread[];
+
+    const stitchabilityScore = result.stitchabilityScore;
+
+    // Convert to data URL
+    const manufacturerImageUrl = `data:image/png;base64,${result.manufacturerImageBuffer.toString("base64")}`;
+
+    return {
+      success: true,
+      manufacturerImageUrl,
+      threads,
+      stitchabilityScore,
+      dimensions: {
+        width: widthStitches,
+        height: heightStitches,
+      },
+    };
+  } catch (err) {
+    console.error("Canvas generation failed:", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Generation failed",
+    };
+  }
+}
+
+/**
+ * Create a canvas with the background pattern/color
+ */
+async function createBackgroundCanvas(
+  width: number,
+  height: number,
+  config: CanvasConfig
+): Promise<Buffer> {
+  const { bgPattern, bgColor1, bgColor2 } = config;
+
+  // Parse hex colors to RGB
+  const color1 = hexToRgb(bgColor1);
+  const color2 = bgColor2 ? hexToRgb(bgColor2) : color1;
+
+  // Create raw pixel buffer
+  const pixels = Buffer.alloc(width * height * 4);
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = (y * width + x) * 4;
+      let color = color1;
+
+      switch (bgPattern) {
+        case "gingham": {
+          const size = Math.max(1, Math.floor(width / 20));
+          if (Math.floor(x / size) % 2 === Math.floor(y / size) % 2) {
+            color = color2;
+          }
+          break;
+        }
+        case "stripes": {
+          const stripeWidth = Math.max(1, Math.floor(width / 15));
+          if (Math.floor(x / stripeWidth) % 2 === 0) {
+            color = color2;
+          }
+          break;
+        }
+        case "checkerboard": {
+          if ((x + y) % 2 === 0) {
+            color = color2;
+          }
+          break;
+        }
+        // default: solid - use color1
+      }
+
+      pixels[idx] = color.r;
+      pixels[idx + 1] = color.g;
+      pixels[idx + 2] = color.b;
+      pixels[idx + 3] = 255;
+    }
+  }
+
+  return sharp(pixels, { raw: { width, height, channels: 4 } })
+    .png()
+    .toBuffer();
+}
+
+/**
+ * Extract cutout from source and composite onto canvas
+ */
+async function compositeCutout(
+  canvas: Buffer,
+  sourceDataUrl: string,
+  path: Point[],
+  transform: PlacedCutout["transform"],
+  canvasWidth: number,
+  canvasHeight: number
+): Promise<Buffer> {
+  // Parse source image data URL
+  const matches = sourceDataUrl.match(/^data:(.+);base64,(.+)$/);
+  if (!matches) return canvas;
+
+  const sourceBuffer = Buffer.from(matches[2], "base64");
+  const sourceImage = sharp(sourceBuffer);
+  const sourceMetadata = await sourceImage.metadata();
+  
+  if (!sourceMetadata.width || !sourceMetadata.height) return canvas;
+
+  // Calculate cutout bounds in source pixels
+  const srcWidth = sourceMetadata.width;
+  const srcHeight = sourceMetadata.height;
+
+  const minX = Math.min(...path.map((p) => p.x));
+  const maxX = Math.max(...path.map((p) => p.x));
+  const minY = Math.min(...path.map((p) => p.y));
+  const maxY = Math.max(...path.map((p) => p.y));
+
+  const cropX = Math.floor(minX * srcWidth);
+  const cropY = Math.floor(minY * srcHeight);
+  const cropWidth = Math.ceil((maxX - minX) * srcWidth);
+  const cropHeight = Math.ceil((maxY - minY) * srcHeight);
+
+  if (cropWidth <= 0 || cropHeight <= 0) return canvas;
+
+  // Extract the cropped region
+  const cropped = await sourceImage
+    .extract({
+      left: Math.max(0, cropX),
+      top: Math.max(0, cropY),
+      width: Math.min(cropWidth, srcWidth - cropX),
+      height: Math.min(cropHeight, srcHeight - cropY),
+    })
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  // Create mask for the lasso path
+  const mask = Buffer.alloc(cropped.info.width * cropped.info.height);
+  const localPath = path.map((p) => ({
+    x: (p.x - minX) / (maxX - minX),
+    y: (p.y - minY) / (maxY - minY),
+  }));
+
+  for (let y = 0; y < cropped.info.height; y++) {
+    for (let x = 0; x < cropped.info.width; x++) {
+      const nx = x / cropped.info.width;
+      const ny = y / cropped.info.height;
+      if (pointInPolygon({ x: nx, y: ny }, localPath)) {
+        mask[y * cropped.info.width + x] = 255;
+      }
+    }
+  }
+
+  // Apply mask to create RGBA with transparency
+  const rgba = Buffer.alloc(cropped.info.width * cropped.info.height * 4);
+  const channels = cropped.info.channels;
+  for (let i = 0; i < cropped.info.width * cropped.info.height; i++) {
+    rgba[i * 4] = cropped.data[i * channels];
+    rgba[i * 4 + 1] = cropped.data[i * channels + 1];
+    rgba[i * 4 + 2] = cropped.data[i * channels + 2];
+    rgba[i * 4 + 3] = mask[i];
+  }
+
+  // Calculate target size on canvas
+  const cutoutAspect = cropWidth / cropHeight;
+  const targetHeight = Math.round(canvasHeight * 0.4 * transform.scale);
+  const targetWidth = Math.round(targetHeight * cutoutAspect);
+
+  // Resize and rotate the cutout
+  let cutoutSharp = sharp(rgba, {
+    raw: { width: cropped.info.width, height: cropped.info.height, channels: 4 },
+  })
+    .resize(targetWidth, targetHeight, { fit: "fill" });
+
+  if (transform.rotation !== 0) {
+    cutoutSharp = cutoutSharp.rotate(transform.rotation, {
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    });
+  }
+
+  if (transform.flipX) {
+    cutoutSharp = cutoutSharp.flop();
+  }
+
+  if (transform.flipY) {
+    cutoutSharp = cutoutSharp.flip();
+  }
+
+  const cutoutBuffer = await cutoutSharp.png().toBuffer();
+
+  // Calculate position on canvas
+  const posX = Math.round(transform.x * canvasWidth - targetWidth / 2);
+  const posY = Math.round(transform.y * canvasHeight - targetHeight / 2);
+
+  // Composite onto canvas
+  return sharp(canvas)
+    .composite([
+      {
+        input: cutoutBuffer,
+        left: Math.max(0, posX),
+        top: Math.max(0, posY),
+      },
+    ])
+    .png()
+    .toBuffer();
+}
+
+function hexToRgb(hex: string): { r: number; g: number; b: number } {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return result
+    ? {
+        r: parseInt(result[1], 16),
+        g: parseInt(result[2], 16),
+        b: parseInt(result[3], 16),
+      }
+    : { r: 255, g: 255, b: 255 };
+}
