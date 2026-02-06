@@ -1,9 +1,15 @@
 "use client";
 
+import { useState } from "react";
 import { useEditorStore, useActiveSource, useEditorHistory } from "@/stores/editor-store";
 import { LassoCanvas } from "./LassoCanvas";
+import { SmartCutoutOverlay } from "./SmartCutoutOverlay";
+
+type CutoutMode = "smart" | "manual";
 
 export function CutoutStep() {
+  const [mode, setMode] = useState<CutoutMode>("smart");
+  
   const activeSource = useActiveSource();
   const setStep = useEditorStore((s) => s.setStep);
   const cutouts = useEditorStore((s) => s.cutouts);
@@ -22,15 +28,45 @@ export function CutoutStep() {
     );
   }
 
+  // Smart mode: AI detection with selection
+  if (mode === "smart") {
+    return (
+      <div className="h-full flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+          <button
+            onClick={() => setStep("upload")}
+            className="text-indigo-600 dark:text-indigo-400 font-medium"
+          >
+            ← Back
+          </button>
+          <span className="text-sm text-gray-500">
+            Select what to include
+          </span>
+          <div className="w-16" /> {/* Spacer for alignment */}
+        </div>
+
+        {/* Smart cutout overlay */}
+        <div className="flex-1 overflow-hidden bg-gray-100 dark:bg-gray-800">
+          <SmartCutoutOverlay
+            onComplete={() => setStep("arrange")}
+            onManualMode={() => setMode("manual")}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // Manual mode: Lasso drawing
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
         <button
-          onClick={() => setStep("upload")}
+          onClick={() => setMode("smart")}
           className="text-indigo-600 dark:text-indigo-400 font-medium"
         >
-          ← Back
+          ← Smart
         </button>
         <span className="text-sm text-gray-500">
           Draw around what to include

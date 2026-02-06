@@ -15,3 +15,10 @@ export {
   quantizeWithVisionGuidance,
   type VisionGuidedResult,
 } from "./guided-quantization";
+
+export {
+  detectSubjects,
+  boundingBoxToPath,
+  type DetectedSubject,
+  type SubjectDetectionResult,
+} from "./subject-detector";
