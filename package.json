@@ -30,6 +30,7 @@
     "@vercel/blob": "^2.0.0",
     "culori": "^4.0.2",
     "image-q": "^4.0.0",
+    "immer": "^11.1.3",
     "next": "15.5.3",
     "next-auth": "^5.0.0-beta.29",
     "nodemailer": "^6.10.1",
@@ -43,7 +44,9 @@
     "tsconfig-paths": "^4.2.0",
     "tsx": "^4.21.0",
     "vercel": "^48.1.0",
-    "zod": "^4.1.11"
+    "zod": "^4.1.11",
+    "zundo": "^2.3.0",
+    "zustand": "^5.0.11"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

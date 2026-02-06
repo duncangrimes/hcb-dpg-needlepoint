@@ -3,21 +3,14 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
 
-enum ImageType {
-  CANVAS
-  RAW
-  MANUFACTURER
-}
-
-enum ImageSource {
-  USER_UPLOAD
-  AI_GENERATED
-}
+// =============================================================================
+// AUTH (NextAuth.js)
+// =============================================================================
 
 model Account {
   id                String  @id @default(cuid())
@@ -55,13 +48,15 @@ model User {
   email         String?   @unique
   emailVerified DateTime? @map("email_verified")
   image         String?
-  accounts      Account[]
-  sessions      Session[]
-  projects      Project[]
-  canvases      Canvas[]
-  images        Image[]
-  prompts       Prompt[]
+  
+  accounts     Account[]
+  sessions     Session[]
+  sourceImages SourceImage[]
+  cutouts      Cutout[]
+  canvases     Canvas[]
+  
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("users")
 }
@@ -75,74 +70,122 @@ model VerificationToken {
   @@map("verification_tokens")
 }
 
-model Project {
-  id        String   @id @default(cuid())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId    String
-  name      String
+// =============================================================================
+// APP MODELS
+// =============================================================================
+
+/// Source photo uploaded by user
+model SourceImage {
+  id     String @id @default(cuid())
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  url    String // Vercel Blob URL
+  width  Int
+  height Int
+
+  cutouts Cutout[]
+
+  createdAt DateTime @default(now())
+
+  @@map("source_images")
+}
+
+/// A lasso'd region from a source photo (reusable across canvases)
+model Cutout {
+  id     String @id @default(cuid())
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  sourceImage   SourceImage @relation(fields: [sourceImageId], references: [id], onDelete: Cascade)
+  sourceImageId String
+
+  /// Lasso path as array of {x, y} points (normalized 0-1)
+  path Json
+
+  /// Optional user-provided label
+  name String?
+
+  /// Extracted cutout image URL (with transparency)
+  extractedUrl String?
+
+  placements PlacedCutout[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  images   Image[]
-  canvases Canvas[]
-  prompts  Prompt[]
+  @@map("cutouts")
 }
 
-model Image {
-  id  String @id @default(cuid())
-  url String
+/// A cutout placed on a canvas with position/transform
+model PlacedCutout {
+  id String @id @default(cuid())
 
-  canvas    Canvas      @relation(fields: [canvasId], references: [id], onDelete: Cascade)
-  canvasId  String
-  type      ImageType
-  source    ImageSource
-  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  projectId String
-  userId    String
-  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  canvas   Canvas @relation(fields: [canvasId], references: [id], onDelete: Cascade)
+  canvasId String
 
-  @@unique([canvasId, type])
-  @@map("images")
+  cutout   Cutout @relation(fields: [cutoutId], references: [id], onDelete: Cascade)
+  cutoutId String
+
+  /// Transform: {x, y, scale, rotation, flipX, flipY}
+  transform Json
+
+  /// Layer order (higher = on top)
+  zIndex Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([canvasId, cutoutId])
+  @@map("placed_cutouts")
 }
 
+enum CanvasStatus {
+  DRAFT
+  PROCESSING
+  COMPLETE
+  FAILED
+}
+
+enum BackgroundPattern {
+  SOLID
+  GINGHAM
+  STRIPES
+  CHECKERBOARD
+}
+
+/// The final needlepoint canvas
 model Canvas {
-  id        String  @id @default(cuid())
-  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  projectId String
-  userId    String
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  images    Image[]
-
-  meshCount Int
-  width     Float
-  numColors Int
-
-  threads String[]
-  prompt  Prompt?
+  id     String @id @default(cuid())
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
 
   name String?
+
+  // Canvas configuration
+  widthInches  Float             @default(8)
+  heightInches Float             @default(10)
+  meshCount    Int               @default(13)
+  bgPattern    BackgroundPattern @default(SOLID)
+  bgColor1     String            @default("#FFFFFF")
+  bgColor2     String?
+
+  // Placed cutouts
+  cutouts PlacedCutout[]
+
+  // Processing status
+  status CanvasStatus @default(DRAFT)
+
+  // Generated output (populated after processing)
+  manufacturerUrl String?
+  threads         Json?    // [{floss, name, hex, r, g, b, stitches, percentage}]
+  stitchability   Float?
+  widthStitches   Int?
+  heightStitches  Int?
+  errorMessage    String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("canvases")
-}
-
-model Prompt {
-  text String
-  originalImageId  String
-  generatedImageId String
-  canvas           Canvas   @relation(fields: [canvasId], references: [id], onDelete: Cascade)
-  project          Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  projectId        String
-  userId           String
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  canvasId         String
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-
-  @@unique([canvasId])
-  @@map("prompts")
 }
