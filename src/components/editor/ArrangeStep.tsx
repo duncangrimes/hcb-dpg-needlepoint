@@ -12,7 +12,8 @@ export function ArrangeStep() {
   const canvasConfig = useEditorStore((s) => s.canvasConfig);
   const placedCutouts = usePlacedCutoutsSorted();
   const activeCutoutId = useEditorStore((s) => s.activeCutoutId);
-  const removeCutout = useEditorStore((s) => s.removeCutout);
+  const placedCutoutsRaw = useEditorStore((s) => s.placedCutouts);
+  const removePlacedCutout = useEditorStore((s) => s.removePlacedCutout);
   
   const [showSettings, setShowSettings] = useState(false);
   const [showLayers, setShowLayers] = useState(false);
@@ -63,7 +64,13 @@ export function ArrangeStep() {
             
             {activeCutoutId && (
               <button
-                onClick={() => removeCutout(activeCutoutId)}
+                onClick={() => {
+                  // Find placement for this cutout and remove it (factory pattern)
+                  const placement = placedCutoutsRaw.find(pc => pc.cutoutId === activeCutoutId);
+                  if (placement) {
+                    removePlacedCutout(placement.id);
+                  }
+                }}
                 className="touch-target px-3 py-2 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-lg font-medium text-sm"
               >
                 🗑️
