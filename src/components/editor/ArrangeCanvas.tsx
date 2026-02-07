@@ -3,7 +3,7 @@
 import { useRef, useState, useEffect, useCallback } from "react";
 import { Stage, Layer, Rect, Image as KonvaImage, Transformer } from "react-konva";
 import type Konva from "konva";
-import { useEditorStore, usePlacedCutoutsSorted, useCutoutsMap } from "@/stores/editor-store";
+import { useEditorStore, usePlacedCutoutsSorted } from "@/stores/editor-store";
 import type { PlacedCutout, Transform } from "@/types/editor";
 import { extractCutout } from "@/lib/editor/extraction";
 
@@ -30,11 +30,14 @@ export function ArrangeCanvas({ className }: ArrangeCanvasProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const placedCutouts = usePlacedCutoutsSorted();
-  const cutoutsMap = useCutoutsMap();
+  const cutouts = useEditorStore((s) => s.cutouts);
   const sourceImages = useEditorStore((s) => s.sourceImages);
   const canvasConfig = useEditorStore((s) => s.canvasConfig);
   const updatePlacedCutout = useEditorStore((s) => s.updatePlacedCutout);
   const selectCutout = useEditorStore((s) => s.selectCutout);
+  
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [extractionError, setExtractionError] = useState<string | null>(null);
 
   // Resize observer
   useEffect(() => {
@@ -82,7 +85,16 @@ export function ArrangeCanvas({ className }: ArrangeCanvasProps) {
 
   // Extract cutout images when placed cutouts change
   useEffect(() => {
+    // Skip if no placements
+    if (placedCutouts.length === 0) return;
+    
+    // Build a map for lookups (inside effect to avoid dependency issues)
+    const cutoutsById = new Map(cutouts.map((c) => [c.id, c]));
+    
     const extractImages = async () => {
+      setIsExtracting(true);
+      setExtractionError(null);
+      
       const newImages = new Map<string, CutoutImage>();
 
       for (const placed of placedCutouts) {
@@ -93,13 +105,19 @@ export function ArrangeCanvas({ className }: ArrangeCanvasProps) {
           continue;
         }
 
-        // Look up cutout from map (factory pattern)
-        const cutout = cutoutsMap.get(placed.cutoutId);
-        if (!cutout) continue;
+        // Look up cutout
+        const cutout = cutoutsById.get(placed.cutoutId);
+        if (!cutout) {
+          console.warn("Cutout not found:", placed.cutoutId);
+          continue;
+        }
 
         // Find source image
         const source = sourceImages.find((s) => s.id === cutout.sourceImageId);
-        if (!source) continue;
+        if (!source) {
+          console.warn("Source image not found:", cutout.sourceImageId);
+          continue;
+        }
 
         try {
           // Extract the cutout pixels
@@ -111,8 +129,12 @@ export function ArrangeCanvas({ className }: ArrangeCanvasProps) {
 
           // Load as image
           const img = new Image();
+          img.crossOrigin = "anonymous";
           img.src = dataUrl;
-          await new Promise((resolve) => { img.onload = resolve; });
+          await new Promise((resolve, reject) => { 
+            img.onload = resolve;
+            img.onerror = reject;
+          });
 
           newImages.set(placed.cutoutId, {
             id: placed.id,
@@ -123,14 +145,16 @@ export function ArrangeCanvas({ className }: ArrangeCanvasProps) {
           });
         } catch (err) {
           console.error("Failed to extract cutout:", err);
+          setExtractionError(`Failed to extract cutout: ${err}`);
         }
       }
 
       setCutoutImages(newImages);
+      setIsExtracting(false);
     };
 
     extractImages();
-  }, [placedCutouts, cutoutsMap, sourceImages]);
+  }, [placedCutouts.length, cutouts, sourceImages]); // Use .length to avoid reference changes
 
   // Update transformer when selection changes
   useEffect(() => {
@@ -220,6 +244,34 @@ export function ArrangeCanvas({ className }: ArrangeCanvasProps) {
 
   // Get background color
   const bgColor = canvasConfig.bgColor1;
+
+  // Show loading state
+  if (isExtracting && cutoutImages.size === 0) {
+    return (
+      <div ref={containerRef} className={className}>
+        <div className="h-full flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin text-4xl mb-2">⏳</div>
+            <p className="text-gray-500">Loading cutouts...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (extractionError) {
+    return (
+      <div ref={containerRef} className={className}>
+        <div className="h-full flex items-center justify-center">
+          <div className="text-center text-red-500">
+            <p className="text-xl mb-2">⚠️</p>
+            <p>{extractionError}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div ref={containerRef} className={className}>

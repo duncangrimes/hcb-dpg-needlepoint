@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useEditorStore, usePlacedCutoutsSorted, useCutoutsMap } from "@/stores/editor-store";
+import { useEditorStore, usePlacedCutoutsSorted } from "@/stores/editor-store";
 // Thumbnail extraction can be used later for proper cutout previews
 // import { createCutoutThumbnail } from "@/lib/editor/extraction";
 
@@ -12,7 +12,7 @@ interface LayerPanelProps {
 
 export function LayerPanel({ isOpen, onClose }: LayerPanelProps) {
   const placedCutouts = usePlacedCutoutsSorted();
-  const cutoutsMap = useCutoutsMap();
+  const cutouts = useEditorStore((s) => s.cutouts);
   const sourceImages = useEditorStore((s) => s.sourceImages);
   const activeCutoutId = useEditorStore((s) => s.activeCutoutId);
   const selectCutout = useEditorStore((s) => s.selectCutout);
@@ -24,6 +24,11 @@ export function LayerPanel({ isOpen, onClose }: LayerPanelProps) {
 
   // Generate thumbnails for cutouts
   useEffect(() => {
+    if (placedCutouts.length === 0) return;
+    
+    // Build lookup map inside effect
+    const cutoutsById = new Map(cutouts.map((c) => [c.id, c]));
+    
     const generateThumbnails = async () => {
       const newThumbs = new Map<string, string>();
 
@@ -34,8 +39,8 @@ export function LayerPanel({ isOpen, onClose }: LayerPanelProps) {
           continue;
         }
 
-        // Look up cutout from map (factory pattern)
-        const cutout = cutoutsMap.get(placed.cutoutId);
+        // Look up cutout
+        const cutout = cutoutsById.get(placed.cutoutId);
         if (!cutout) continue;
 
         // Find source image
@@ -44,7 +49,6 @@ export function LayerPanel({ isOpen, onClose }: LayerPanelProps) {
 
         try {
           // Use source URL as thumbnail for now
-          // TODO: Generate actual cutout thumbnail
           newThumbs.set(placed.cutoutId, source.url);
         } catch (err) {
           console.error("Failed to generate thumbnail:", err);
@@ -55,7 +59,7 @@ export function LayerPanel({ isOpen, onClose }: LayerPanelProps) {
     };
 
     generateThumbnails();
-  }, [placedCutouts, cutoutsMap, sourceImages]);
+  }, [placedCutouts.length, cutouts, sourceImages]);
 
   const handleDragStart = useCallback((index: number) => {
     setDraggedIndex(index);
