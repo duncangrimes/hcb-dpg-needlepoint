@@ -171,3 +171,11 @@ export function polygonArea(polygon: Point[]): number {
 
   return Math.abs(area / 2);
 }
+
+/**
+ * Get aspect ratio (height/width) from a path's bounding box
+ */
+export function getAspectRatio(path: Point[]): number {
+  const bounds = getPolygonBounds(path);
+  return bounds.height / Math.max(bounds.width, 0.001);
+}

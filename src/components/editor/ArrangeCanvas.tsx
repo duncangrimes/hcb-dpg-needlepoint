@@ -3,7 +3,7 @@
 import { useRef, useState, useEffect, useCallback } from "react";
 import { Stage, Layer, Rect, Image as KonvaImage, Transformer } from "react-konva";
 import type Konva from "konva";
-import { useEditorStore, usePlacedCutoutsSorted, useActiveSource } from "@/stores/editor-store";
+import { useEditorStore, usePlacedCutoutsSorted, useCutoutsMap } from "@/stores/editor-store";
 import type { PlacedCutout, Transform } from "@/types/editor";
 import { extractCutout } from "@/lib/editor/extraction";
 
@@ -30,6 +30,7 @@ export function ArrangeCanvas({ className }: ArrangeCanvasProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const placedCutouts = usePlacedCutoutsSorted();
+  const cutoutsMap = useCutoutsMap();
   const sourceImages = useEditorStore((s) => s.sourceImages);
   const canvasConfig = useEditorStore((s) => s.canvasConfig);
   const updatePlacedCutout = useEditorStore((s) => s.updatePlacedCutout);
@@ -92,15 +93,19 @@ export function ArrangeCanvas({ className }: ArrangeCanvasProps) {
           continue;
         }
 
+        // Look up cutout from map (factory pattern)
+        const cutout = cutoutsMap.get(placed.cutoutId);
+        if (!cutout) continue;
+
         // Find source image
-        const source = sourceImages.find((s) => s.id === placed.cutout.sourceImageId);
+        const source = sourceImages.find((s) => s.id === cutout.sourceImageId);
         if (!source) continue;
 
         try {
           // Extract the cutout pixels
           const { dataUrl, width, height } = await extractCutout(
             source.url,
-            placed.cutout.path,
+            cutout.path,
             { padding: 4, featherRadius: 2 }
           );
 
@@ -125,7 +130,7 @@ export function ArrangeCanvas({ className }: ArrangeCanvasProps) {
     };
 
     extractImages();
-  }, [placedCutouts, sourceImages]);
+  }, [placedCutouts, cutoutsMap, sourceImages]);
 
   // Update transformer when selection changes
   useEffect(() => {

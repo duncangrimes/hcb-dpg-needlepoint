@@ -6,12 +6,14 @@ import {
 } from "@/lib/upload/manufacturer-image-processing";
 import type { Thread } from "@/lib/colors";
 import { pointInPolygon } from "@/lib/editor/geometry";
-import type { PlacedCutout, CanvasConfig, Point } from "@/types/editor";
+import type { PlacedCutout, Cutout, CanvasConfig, Point } from "@/types/editor";
 
 export interface GenerateCanvasInput {
   /** Source images as data URLs keyed by id */
   sourceImages: Record<string, string>;
-  /** Placed cutouts with paths and transforms */
+  /** Cutouts (reusable assets) keyed by id */
+  cutouts: Record<string, Cutout>;
+  /** Placed cutouts (instances on canvas) */
   placedCutouts: PlacedCutout[];
   /** Canvas configuration */
   canvasConfig: CanvasConfig;
@@ -55,7 +57,11 @@ export async function generateCanvasAction(
 
     // Composite each cutout onto the canvas
     for (const placed of placedCutouts) {
-      const sourceDataUrl = sourceImages[placed.cutout.sourceImageId];
+      // Look up cutout from map (factory pattern)
+      const cutout = input.cutouts[placed.cutoutId];
+      if (!cutout) continue;
+
+      const sourceDataUrl = sourceImages[cutout.sourceImageId];
       if (!sourceDataUrl) continue;
 
       // Extract and composite the cutout with proper mesh sizing
@@ -63,6 +69,7 @@ export async function generateCanvasAction(
         canvas,
         sourceDataUrl,
         placed,
+        cutout,
         canvasConfig.meshCount,
         widthStitches,
         heightStitches
@@ -170,17 +177,19 @@ async function createBackgroundCanvas(
  * Extract cutout from source and composite onto canvas
  * 
  * @param placed - The placed cutout with physical sizing info
+ * @param cutout - The cutout asset with path data
  * @param meshCount - Stitches per inch for consistent sizing
  */
 async function compositeCutout(
   canvas: Buffer,
   sourceDataUrl: string,
   placed: PlacedCutout,
+  cutout: Cutout,
   meshCount: number,
   canvasWidth: number,
   canvasHeight: number
 ): Promise<Buffer> {
-  const { path } = placed.cutout;
+  const { path } = cutout;
   const { transform, widthInches, aspectRatio } = placed;
   // Parse source image data URL
   const matches = sourceDataUrl.match(/^data:(.+);base64,(.+)$/);

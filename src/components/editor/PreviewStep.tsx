@@ -11,6 +11,7 @@ export function PreviewStep() {
   const setProcessing = useEditorStore((s) => s.setProcessing);
   const canvasConfig = useEditorStore((s) => s.canvasConfig);
   const sourceImages = useEditorStore((s) => s.sourceImages);
+  const cutouts = useEditorStore((s) => s.cutouts);
   const placedCutouts = usePlacedCutoutsSorted();
 
   const [result, setResult] = useState<GenerateCanvasResult | null>(null);
@@ -36,8 +37,15 @@ export function PreviewStep() {
         sourceImageDataUrls[source.id] = dataUrl;
       }
 
+      // Convert cutouts array to map
+      const cutoutsMap: Record<string, typeof cutouts[0]> = {};
+      for (const cutout of cutouts) {
+        cutoutsMap[cutout.id] = cutout;
+      }
+
       const generationResult = await generateCanvasAction({
         sourceImages: sourceImageDataUrls,
+        cutouts: cutoutsMap,
         placedCutouts,
         canvasConfig,
       });

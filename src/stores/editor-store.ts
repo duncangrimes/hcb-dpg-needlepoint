@@ -21,6 +21,7 @@ import {
   type Transform,
   type CanvasConfig,
 } from '@/types/editor';
+import { getAspectRatio } from '@/lib/editor/geometry';
 
 // =============================================================================
 // Store Interface
@@ -179,25 +180,14 @@ export const useEditorStore = create<EditorStore>()(
         };
         state.cutouts.push(newCutout);
 
-        // Calculate aspect ratio from path bounds
-        const pathXs = state.currentPath.map(p => p.x);
-        const pathYs = state.currentPath.map(p => p.y);
-        const pathWidth = Math.max(...pathXs) - Math.min(...pathXs);
-        const pathHeight = Math.max(...pathYs) - Math.min(...pathYs);
-        const aspectRatio = pathHeight / Math.max(pathWidth, 0.001);
-        
-        // Default width: 40% of canvas width
-        const defaultWidthInches = state.canvasConfig.widthInches * 0.4;
-
-        // Auto-place on canvas
+        // Auto-place on canvas (factory pattern: reference by ID only)
         const newPlacement: PlacedCutout = {
           id: crypto.randomUUID(),
           cutoutId: newCutout.id,
-          cutout: newCutout,
           transform: { ...DEFAULT_TRANSFORM },
           zIndex: state.placedCutouts.length,
-          widthInches: defaultWidthInches,
-          aspectRatio,
+          widthInches: state.canvasConfig.widthInches * 0.4, // 40% of canvas
+          aspectRatio: getAspectRatio(state.currentPath),
         };
         state.placedCutouts.push(newPlacement);
         state.activeCutoutId = newCutout.id;
@@ -225,12 +215,7 @@ export const useEditorStore = create<EditorStore>()(
         if (cutout) {
           Object.assign(cutout, updates);
         }
-        // Update references in placed cutouts
-        state.placedCutouts.forEach((pc) => {
-          if (pc.cutoutId === id && pc.cutout) {
-            Object.assign(pc.cutout, updates);
-          }
-        });
+        // No need to sync - factory pattern uses references by ID
       }),
 
       removeCutout: (id) => set((state) => {
@@ -257,24 +242,14 @@ export const useEditorStore = create<EditorStore>()(
         const existing = state.placedCutouts.find((pc) => pc.cutoutId === cutoutId);
         if (existing) return;
 
-        // Calculate aspect ratio from path bounds
-        const pathXs = cutout.path.map(p => p.x);
-        const pathYs = cutout.path.map(p => p.y);
-        const pathWidth = Math.max(...pathXs) - Math.min(...pathXs);
-        const pathHeight = Math.max(...pathYs) - Math.min(...pathYs);
-        const aspectRatio = pathHeight / Math.max(pathWidth, 0.001);
-        
-        // Default width: 40% of canvas width
-        const defaultWidthInches = state.canvasConfig.widthInches * 0.4;
-
+        // Factory pattern: reference cutout by ID only
         const newPlacement: PlacedCutout = {
           id: crypto.randomUUID(),
           cutoutId,
-          cutout,
           transform: { ...DEFAULT_TRANSFORM, ...transform },
           zIndex: state.placedCutouts.length,
-          widthInches: defaultWidthInches,
-          aspectRatio,
+          widthInches: state.canvasConfig.widthInches * 0.4,
+          aspectRatio: getAspectRatio(cutout.path),
         };
         state.placedCutouts.push(newPlacement);
       }),
@@ -375,4 +350,18 @@ export const useActiveCutout = () => {
 export const usePlacedCutoutsSorted = () => {
   const { placedCutouts } = useEditorStore();
   return [...placedCutouts].sort((a, b) => a.zIndex - b.zIndex);
+};
+
+export const useCutoutById = (id: string | null) => {
+  const { cutouts } = useEditorStore();
+  if (!id) return null;
+  return cutouts.find((c) => c.id === id) ?? null;
+};
+
+/**
+ * Get cutout lookup map for efficient access
+ */
+export const useCutoutsMap = () => {
+  const { cutouts } = useEditorStore();
+  return new Map(cutouts.map((c) => [c.id, c]));
 };

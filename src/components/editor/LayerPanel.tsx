@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useEditorStore, usePlacedCutoutsSorted } from "@/stores/editor-store";
-import { createCutoutThumbnail } from "@/lib/editor/extraction";
-import type { PlacedCutout } from "@/types/editor";
+import { useEditorStore, usePlacedCutoutsSorted, useCutoutsMap } from "@/stores/editor-store";
+// Thumbnail extraction can be used later for proper cutout previews
+// import { createCutoutThumbnail } from "@/lib/editor/extraction";
 
 interface LayerPanelProps {
   isOpen: boolean;
@@ -12,10 +12,11 @@ interface LayerPanelProps {
 
 export function LayerPanel({ isOpen, onClose }: LayerPanelProps) {
   const placedCutouts = usePlacedCutoutsSorted();
+  const cutoutsMap = useCutoutsMap();
   const sourceImages = useEditorStore((s) => s.sourceImages);
   const activeCutoutId = useEditorStore((s) => s.activeCutoutId);
   const selectCutout = useEditorStore((s) => s.selectCutout);
-  const removeCutout = useEditorStore((s) => s.removeCutout);
+  const removePlacedCutout = useEditorStore((s) => s.removePlacedCutout);
   const reorderCutouts = useEditorStore((s) => s.reorderCutouts);
 
   const [thumbnails, setThumbnails] = useState<Map<string, string>>(new Map());
@@ -33,13 +34,17 @@ export function LayerPanel({ isOpen, onClose }: LayerPanelProps) {
           continue;
         }
 
+        // Look up cutout from map (factory pattern)
+        const cutout = cutoutsMap.get(placed.cutoutId);
+        if (!cutout) continue;
+
         // Find source image
-        const source = sourceImages.find((s) => s.id === placed.cutout.sourceImageId);
+        const source = sourceImages.find((s) => s.id === cutout.sourceImageId);
         if (!source) continue;
 
         try {
-          // For now, use a placeholder or generate from source
-          // In a full implementation, we'd extract the cutout and create a thumbnail
+          // Use source URL as thumbnail for now
+          // TODO: Generate actual cutout thumbnail
           newThumbs.set(placed.cutoutId, source.url);
         } catch (err) {
           console.error("Failed to generate thumbnail:", err);
@@ -50,7 +55,7 @@ export function LayerPanel({ isOpen, onClose }: LayerPanelProps) {
     };
 
     generateThumbnails();
-  }, [placedCutouts, sourceImages]);
+  }, [placedCutouts, cutoutsMap, sourceImages]);
 
   const handleDragStart = useCallback((index: number) => {
     setDraggedIndex(index);
@@ -160,11 +165,11 @@ export function LayerPanel({ isOpen, onClose }: LayerPanelProps) {
                       </p>
                     </div>
 
-                    {/* Delete button */}
+                    {/* Delete button - removes placement only (factory pattern) */}
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        removeCutout(placed.cutoutId);
+                        removePlacedCutout(placed.id);
                       }}
                       className="p-2 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
                     >

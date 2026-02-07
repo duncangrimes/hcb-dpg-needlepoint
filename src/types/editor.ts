@@ -56,8 +56,7 @@ export interface Cutout {
 
 export interface PlacedCutout {
   id: string;          // PlacedCutout record ID
-  cutoutId: string;
-  cutout: Cutout;
+  cutoutId: string;    // Reference to Cutout (factory pattern - no embedding)
   transform: Transform;
   zIndex: number;
   
@@ -156,19 +155,6 @@ export interface EditorState {
 }
 
 // =============================================================================
-// AI Detection (for smart cutout)
+// AI Detection (Phase 2+)
 // =============================================================================
-
-export interface DetectedSubject {
-  id: string;
-  label: string;        // AI-detected label ("dog", "person", etc.)
-  confidence: number;   // 0-1
-  boundingBox: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  };
-  mask?: string;        // Base64 mask image
-  selected: boolean;    // User selection state
-}
+// Placeholder for future smart cutout feature - not used in MVP
