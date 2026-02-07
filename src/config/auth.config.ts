@@ -17,15 +17,15 @@ export const authConfig = {
     //   return true;
     // },
     async redirect({ url, baseUrl }) {
-      // Default redirect to dashboard after sign in
+      // Default redirect to editor after sign in
       if (url === baseUrl || url === `${baseUrl}/`) {
-        return `${baseUrl}/dashboard`;
+        return `${baseUrl}/editor`;
       }
       // Allow relative callback URLs
       if (url.startsWith('/')) return `${baseUrl}${url}`;
       // Allow callback URLs on the same origin
       if (new URL(url).origin === baseUrl) return url;
-      return `${baseUrl}/dashboard`;
+      return `${baseUrl}/editor`;
     },
   },
   providers: [], // Add providers with an empty array for now

@@ -84,7 +84,7 @@ export function ClipModal({ isOpen, onClose, onGoToCanvas }: ClipModalProps) {
                   Draw Selection
                 </DialogTitle>
                 <div className="w-16 text-right text-sm text-gray-400">
-                  {cutoutCount} clip{cutoutCount !== 1 ? "s" : ""}
+                  {cutoutCount} cutout{cutoutCount !== 1 ? "s" : ""}
                 </div>
               </div>
 
@@ -114,7 +114,7 @@ export function ClipModal({ isOpen, onClose, onGoToCanvas }: ClipModalProps) {
                       onClick={handleContinueClipping}
                       className="flex-1 py-3 bg-gray-700 text-white rounded-xl font-medium"
                     >
-                      ✂️ Continue Clipping
+                      ✂️ Add Another Cutout
                     </button>
                     <button
                       onClick={handleGoToCanvas}

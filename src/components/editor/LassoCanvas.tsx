@@ -137,15 +137,16 @@ export function LassoCanvas({ className, onCutoutComplete }: LassoCanvasProps) {
     [currentPath, normalizedToScreen]
   );
 
-  // Mouse/touch event handlers
+  // Mouse/touch event handlers - using Konva's event system
   const handlePointerDown = useCallback(
-    (e: { evt: PointerEvent }) => {
+    (e: any) => {
       if (tool !== "lasso") return;
 
-      const stage = e.evt.target as unknown as { getStage?: () => { getPointerPosition: () => { x: number; y: number } | null } };
-      if (!stage.getStage) return;
+      // Get stage from the event target
+      const stage = e.target.getStage();
+      if (!stage) return;
       
-      const pos = stage.getStage().getPointerPosition();
+      const pos = stage.getPointerPosition();
       if (!pos) return;
 
       const normalized = screenToNormalized(pos.x, pos.y);
@@ -157,13 +158,13 @@ export function LassoCanvas({ className, onCutoutComplete }: LassoCanvasProps) {
   );
 
   const handlePointerMove = useCallback(
-    (e: { evt: PointerEvent }) => {
+    (e: any) => {
       if (!isDrawing || tool !== "lasso") return;
 
-      const stage = e.evt.target as unknown as { getStage?: () => { getPointerPosition: () => { x: number; y: number } | null } };
-      if (!stage.getStage) return;
+      const stage = e.target.getStage();
+      if (!stage) return;
       
-      const pos = stage.getStage().getPointerPosition();
+      const pos = stage.getPointerPosition();
       if (!pos) return;
 
       const normalized = screenToNormalized(pos.x, pos.y);
@@ -238,10 +239,13 @@ export function LassoCanvas({ className, onCutoutComplete }: LassoCanvasProps) {
       <Stage
         width={dimensions.width}
         height={dimensions.height}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerLeave={handlePointerUp}
+        onMouseDown={handlePointerDown}
+        onMouseMove={handlePointerMove}
+        onMouseUp={handlePointerUp}
+        onMouseLeave={handlePointerUp}
+        onTouchStart={handlePointerDown}
+        onTouchMove={handlePointerMove}
+        onTouchEnd={handlePointerUp}
         style={{ touchAction: "none" }}
       >
         <Layer>
