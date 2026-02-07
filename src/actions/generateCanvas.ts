@@ -120,7 +120,7 @@ export async function generateCanvasAction(
           widthInches: canvasConfig.widthInches,
           heightInches: canvasConfig.heightInches,
           meshCount: canvasConfig.meshCount,
-          bgPattern: canvasConfig.bgPattern,
+          bgPattern: canvasConfig.bgPattern.toUpperCase() as "SOLID" | "GINGHAM" | "STRIPES" | "CHECKERBOARD",
           bgColor1: canvasConfig.bgColor1,
           bgColor2: canvasConfig.bgColor2,
           manufacturerUrl: blob.url,
