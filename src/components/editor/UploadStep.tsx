@@ -4,6 +4,78 @@ import { useRef, useState } from "react";
 import { useEditorStore } from "@/stores/editor-store";
 import { saveSourceImage } from "@/actions/sourceImages";
 
+// Max dimension for uploaded images (reduces upload time significantly)
+const MAX_IMAGE_DIMENSION = 2048;
+
+/**
+ * Resize an image if it exceeds max dimensions
+ * Returns a data URL of the resized image
+ */
+async function resizeImage(
+  file: File,
+  maxDimension: number
+): Promise<{ dataUrl: string; width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      
+      let { width, height } = img;
+      
+      // Check if resize is needed
+      if (width <= maxDimension && height <= maxDimension) {
+        // No resize needed, just convert to data URL
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d")!;
+        ctx.drawImage(img, 0, 0);
+        resolve({
+          dataUrl: canvas.toDataURL("image/jpeg", 0.9),
+          width,
+          height,
+        });
+        return;
+      }
+      
+      // Calculate new dimensions maintaining aspect ratio
+      if (width > height) {
+        height = Math.round((height / width) * maxDimension);
+        width = maxDimension;
+      } else {
+        width = Math.round((width / height) * maxDimension);
+        height = maxDimension;
+      }
+      
+      // Create canvas and draw resized image
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d")!;
+      
+      // Use better quality scaling
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(img, 0, 0, width, height);
+      
+      resolve({
+        dataUrl: canvas.toDataURL("image/jpeg", 0.9),
+        width,
+        height,
+      });
+    };
+    
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Failed to load image"));
+    };
+    
+    img.src = url;
+  });
+}
+
 export function UploadStep() {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const libraryInputRef = useRef<HTMLInputElement>(null);
@@ -18,29 +90,14 @@ export function UploadStep() {
     setError(null);
 
     try {
-      // Create object URL for preview
-      const url = URL.createObjectURL(file);
-
-      // Get image dimensions
-      const img = new Image();
-      img.src = url;
-      await new Promise((resolve) => {
-        img.onload = resolve;
-      });
-
-      // Convert to base64 for upload
-      const reader = new FileReader();
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
+      // Resize image if needed (reduces upload time significantly)
+      const { dataUrl, width, height } = await resizeImage(file, MAX_IMAGE_DIMENSION);
 
       // Save to database
       const result = await saveSourceImage({
         dataUrl,
-        width: img.naturalWidth,
-        height: img.naturalHeight,
+        width,
+        height,
       });
 
       if (!result.success || !result.sourceImage) {
@@ -54,9 +111,6 @@ export function UploadStep() {
         width: result.sourceImage.width,
         height: result.sourceImage.height,
       });
-
-      // Revoke the local blob URL (we're using the stored one now)
-      URL.revokeObjectURL(url);
     } catch (err) {
       console.error("Upload failed:", err);
       setError(err instanceof Error ? err.message : "Upload failed");

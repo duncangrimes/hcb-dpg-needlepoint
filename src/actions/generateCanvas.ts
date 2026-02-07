@@ -1,6 +1,9 @@
 "use server";
 
 import sharp from "sharp";
+import { put } from "@vercel/blob";
+import { auth } from "@/lib/auth";
+import prisma from "@/lib/prisma";
 import {
   processImageForManufacturing,
 } from "@/lib/upload/manufacturer-image-processing";
@@ -9,6 +12,8 @@ import { pointInPolygon } from "@/lib/editor/geometry";
 import type { PlacedCutout, Cutout, CanvasConfig, Point } from "@/types/editor";
 
 export interface GenerateCanvasInput {
+  /** Canvas ID (if updating existing canvas) */
+  canvasId?: string | null;
   /** Source images as data URLs keyed by id */
   sourceImages: Record<string, string>;
   /** Cutouts (reusable assets) keyed by id */
@@ -21,8 +26,10 @@ export interface GenerateCanvasInput {
 
 export interface GenerateCanvasResult {
   success: boolean;
-  /** Manufacturer image as data URL */
+  /** Manufacturer image as data URL or blob URL */
   manufacturerImageUrl?: string;
+  /** Saved canvas ID */
+  canvasId?: string | null;
   /** Thread list */
   threads?: Thread[];
   /** Stitchability score (0-10) */
@@ -93,12 +100,65 @@ export async function generateCanvasAction(
 
     const stitchabilityScore = result.stitchabilityScore;
 
-    // Convert to data URL
-    const manufacturerImageUrl = `data:image/png;base64,${result.manufacturerImageBuffer.toString("base64")}`;
+    // Upload to blob storage and save to database if authenticated
+    let manufacturerImageUrl: string;
+    let savedCanvasId = input.canvasId;
+    
+    try {
+      const session = await auth();
+      if (session?.user?.id) {
+        // Upload to Vercel Blob
+        const blob = await put(
+          `canvases/${session.user.id}/${Date.now()}-manufacturer.png`,
+          result.manufacturerImageBuffer,
+          { access: "public", contentType: "image/png" }
+        );
+        manufacturerImageUrl = blob.url;
+
+        // Save/update canvas in database
+        const canvasData = {
+          widthInches: canvasConfig.widthInches,
+          heightInches: canvasConfig.heightInches,
+          meshCount: canvasConfig.meshCount,
+          bgPattern: canvasConfig.bgPattern,
+          bgColor1: canvasConfig.bgColor1,
+          bgColor2: canvasConfig.bgColor2,
+          manufacturerUrl: blob.url,
+          threads: JSON.stringify(threads),
+          stitchability: stitchabilityScore,
+          status: "COMPLETE" as const,
+        };
+
+        if (savedCanvasId) {
+          // Update existing canvas
+          await prisma.canvas.update({
+            where: { id: savedCanvasId },
+            data: canvasData,
+          });
+        } else {
+          // Create new canvas
+          const newCanvas = await prisma.canvas.create({
+            data: {
+              ...canvasData,
+              userId: session.user.id,
+            },
+          });
+          savedCanvasId = newCanvas.id;
+        }
+      } else {
+        // No auth - use data URL
+        manufacturerImageUrl = `data:image/png;base64,${result.manufacturerImageBuffer.toString("base64")}`;
+      }
+    } catch (saveError) {
+      console.error("Failed to save canvas:", saveError);
+      // Fallback to data URL if save fails
+      manufacturerImageUrl = `data:image/png;base64,${result.manufacturerImageBuffer.toString("base64")}`;
+    }
 
     return {
       success: true,
       manufacturerImageUrl,
+      canvasId: savedCanvasId,
       threads,
       stitchabilityScore,
       dimensions: {

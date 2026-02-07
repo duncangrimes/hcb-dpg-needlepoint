@@ -33,6 +33,7 @@ export function LassoCanvas({ className, onCutoutComplete }: LassoCanvasProps) {
   const finishDrawing = useEditorStore((s) => s.finishDrawing);
   const cancelDrawing = useEditorStore((s) => s.cancelDrawing);
   const selectCutout = useEditorStore((s) => s.selectCutout);
+  const updateCutout = useEditorStore((s) => s.updateCutout);
 
   // Load source image
   useEffect(() => {
@@ -189,24 +190,69 @@ export function LassoCanvas({ className, onCutoutComplete }: LassoCanvasProps) {
       const pathHeight = Math.max(...pathYs) - Math.min(...pathYs);
       const aspectRatio = pathHeight / Math.max(pathWidth, 0.001);
       
-      // Create cutout in store
+      // Create cutout in store (shows immediately)
       finishDrawing();
+      
+      // Get the cutout ID that was just created
+      const newCutoutId = useEditorStore.getState().activeCutoutId;
+      
       onCutoutComplete?.();
       
-      // Save to database (fire and forget for now)
-      saveCutout({
-        sourceImageId: activeSource.id,
-        path: pathToSave,
-        aspectRatio,
-      }).then((result) => {
-        if (!result.success) {
-          console.error("Failed to save cutout:", result.error);
+      // Defer heavy extraction work to avoid UI freeze
+      // Use setTimeout to let the UI update first, then do extraction in idle time
+      setTimeout(() => {
+        // Use requestIdleCallback if available for better scheduling
+        const doExtraction = async () => {
+          try {
+            // Dynamically import extraction to avoid SSR issues
+            const { extractCutout, createCutoutThumbnail } = await import("@/lib/editor/extraction");
+            
+            // Extract the cutout image
+            const { dataUrl } = await extractCutout(
+              activeSource.url,
+              pathToSave,
+              { padding: 4, featherRadius: 2 }
+            );
+            
+            // Create thumbnail for library
+            const thumbnailDataUrl = await createCutoutThumbnail(dataUrl, 200);
+            
+            // Save to database with extracted images
+            const result = await saveCutout({
+              sourceImageId: activeSource.id,
+              path: pathToSave,
+              aspectRatio,
+              extractedDataUrl: dataUrl,
+              thumbnailDataUrl,
+            });
+            
+            if (!result.success) {
+              console.error("Failed to save cutout:", result.error);
+            } else if (result.cutout?.extractedUrl && newCutoutId) {
+              // Update the store's cutout with the blob storage URL
+              updateCutout(newCutoutId, { extractedUrl: result.cutout.extractedUrl });
+            }
+          } catch (err) {
+            console.error("Failed to extract/save cutout:", err);
+            // Still try to save without extracted image
+            saveCutout({
+              sourceImageId: activeSource.id,
+              path: pathToSave,
+              aspectRatio,
+            });
+          }
+        };
+        
+        if ('requestIdleCallback' in window) {
+          (window as any).requestIdleCallback(doExtraction, { timeout: 2000 });
+        } else {
+          doExtraction();
         }
-      });
+      }, 50); // Small delay to let UI update
     } else {
       cancelDrawing();
     }
-  }, [isDrawing, currentPath, activeSource, finishDrawing, cancelDrawing, onCutoutComplete]);
+  }, [isDrawing, currentPath, activeSource, finishDrawing, cancelDrawing, onCutoutComplete, updateCutout]);
 
   // Convert path to flat array for Konva Line
   const pathToPoints = useCallback(

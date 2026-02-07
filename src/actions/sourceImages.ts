@@ -28,7 +28,15 @@ export async function saveSourceImage(
   input: SaveSourceImageInput
 ): Promise<SaveSourceImageResult> {
   try {
-    const session = await auth();
+    // Auth check
+    let session;
+    try {
+      session = await auth();
+    } catch (authErr) {
+      console.error("Auth error:", authErr);
+      return { success: false, error: "Authentication error" };
+    }
+    
     if (!session?.user?.id) {
       return { success: false, error: "Not authenticated" };
     }
@@ -41,30 +49,49 @@ export async function saveSourceImage(
 
     const contentType = matches[1];
     const base64Data = matches[2];
-    const buffer = Buffer.from(base64Data, "base64");
+    
+    let buffer: Buffer;
+    try {
+      buffer = Buffer.from(base64Data, "base64");
+    } catch (bufferErr) {
+      console.error("Buffer error:", bufferErr);
+      return { success: false, error: "Failed to process image data" };
+    }
 
     // Upload to blob storage
-    const blob = await put(
-      `sources/${session.user.id}/${Date.now()}.${contentType.split("/")[1] || "png"}`,
-      buffer,
-      { contentType, access: "public" }
-    );
+    let blob;
+    try {
+      blob = await put(
+        `sources/${session.user.id}/${Date.now()}.${contentType.split("/")[1] || "png"}`,
+        buffer,
+        { contentType, access: "public" }
+      );
+    } catch (blobErr) {
+      console.error("Blob storage error:", blobErr);
+      return { success: false, error: "Failed to upload image" };
+    }
 
     // Save to database
-    const sourceImage = await prisma.sourceImage.create({
-      data: {
-        userId: session.user.id,
-        url: blob.url,
-        width: input.width,
-        height: input.height,
-      },
-      select: {
-        id: true,
-        url: true,
-        width: true,
-        height: true,
-      },
-    });
+    let sourceImage;
+    try {
+      sourceImage = await prisma.sourceImage.create({
+        data: {
+          userId: session.user.id,
+          url: blob.url,
+          width: input.width,
+          height: input.height,
+        },
+        select: {
+          id: true,
+          url: true,
+          width: true,
+          height: true,
+        },
+      });
+    } catch (dbErr) {
+      console.error("Database error:", dbErr);
+      return { success: false, error: "Failed to save to database" };
+    }
 
     return { success: true, sourceImage };
   } catch (err) {

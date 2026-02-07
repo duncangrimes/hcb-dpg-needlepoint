@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useEffect, useCallback } from "react";
-import { Stage, Layer, Rect, Image as KonvaImage, Transformer } from "react-konva";
+import { Stage, Layer, Rect, Image as KonvaImage, Transformer, Group } from "react-konva";
 import type Konva from "konva";
 import { useEditorStore, usePlacedCutoutsSorted } from "@/stores/editor-store";
 import type { PlacedCutout, Transform } from "@/types/editor";
@@ -19,6 +19,9 @@ interface CutoutImage {
   naturalHeight: number;
 }
 
+// Cache for loaded images to avoid re-fetching
+const imageCache = new Map<string, HTMLImageElement>();
+
 export function ArrangeCanvas({ className }: ArrangeCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
@@ -28,6 +31,13 @@ export function ArrangeCanvas({ className }: ArrangeCanvasProps) {
   const [canvasDimensions, setCanvasDimensions] = useState({ width: 0, height: 0, x: 0, y: 0 });
   const [cutoutImages, setCutoutImages] = useState<Map<string, CutoutImage>>(new Map());
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  
+  // Pinch-to-zoom state
+  const [pinchState, setPinchState] = useState<{
+    initialDistance: number;
+    initialScale: number;
+    placedId: string;
+  } | null>(null);
 
   const placedCutouts = usePlacedCutoutsSorted();
   const cutouts = useEditorStore((s) => s.cutouts);
@@ -83,6 +93,23 @@ export function ArrangeCanvas({ className }: ArrangeCanvasProps) {
     });
   }, [dimensions, canvasConfig]);
 
+  // Load image with caching
+  const loadImage = useCallback(async (url: string): Promise<HTMLImageElement> => {
+    const cached = imageCache.get(url);
+    if (cached) return cached;
+    
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.src = url;
+    await new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = reject;
+    });
+    
+    imageCache.set(url, img);
+    return img;
+  }, []);
+
   // Extract cutout images when placed cutouts change
   useEffect(() => {
     // Skip if no placements
@@ -112,14 +139,27 @@ export function ArrangeCanvas({ className }: ArrangeCanvasProps) {
           continue;
         }
 
-        // Find source image
-        const source = sourceImages.find((s) => s.id === cutout.sourceImageId);
-        if (!source) {
-          console.warn("Source image not found:", cutout.sourceImageId);
-          continue;
-        }
-
         try {
+          // If cutout has a pre-extracted URL, use it (faster)
+          if (cutout.extractedUrl) {
+            const img = await loadImage(cutout.extractedUrl);
+            newImages.set(placed.cutoutId, {
+              id: placed.id,
+              cutoutId: placed.cutoutId,
+              image: img,
+              naturalWidth: img.naturalWidth,
+              naturalHeight: img.naturalHeight,
+            });
+            continue;
+          }
+
+          // Otherwise, extract from source image
+          const source = sourceImages.find((s) => s.id === cutout.sourceImageId);
+          if (!source) {
+            console.warn("Source image not found:", cutout.sourceImageId);
+            continue;
+          }
+
           // Extract the cutout pixels
           const { dataUrl, width, height } = await extractCutout(
             source.url,
@@ -154,7 +194,7 @@ export function ArrangeCanvas({ className }: ArrangeCanvasProps) {
     };
 
     extractImages();
-  }, [placedCutouts.length, cutouts, sourceImages]); // Use .length to avoid reference changes
+  }, [placedCutouts.length, cutouts, sourceImages, loadImage]); // Use .length to avoid reference changes
 
   // Update transformer when selection changes
   useEffect(() => {
@@ -219,7 +259,10 @@ export function ArrangeCanvas({ className }: ArrangeCanvasProps) {
   // Calculate cutout position and size on canvas
   // Uses physical dimensions (inches) for consistent mesh sizing
   const getCutoutProps = (placed: PlacedCutout, cutoutImg: CutoutImage) => {
-    const { transform, widthInches, aspectRatio } = placed;
+    const { transform, widthInches } = placed;
+    
+    // Use actual image dimensions for correct aspect ratio
+    const actualAspectRatio = cutoutImg.naturalHeight / cutoutImg.naturalWidth;
     
     // Convert physical inches to display pixels
     // canvasDimensions.width pixels = canvasConfig.widthInches inches
@@ -227,7 +270,7 @@ export function ArrangeCanvas({ className }: ArrangeCanvasProps) {
     
     // Calculate display size from physical dimensions
     const width = widthInches * pixelsPerInch * transform.scale;
-    const height = width * aspectRatio;
+    const height = width * actualAspectRatio;
 
     return {
       x: canvasDimensions.x + transform.x * canvasDimensions.width,
@@ -241,6 +284,60 @@ export function ArrangeCanvas({ className }: ArrangeCanvasProps) {
       offsetY: height / 2,
     };
   };
+  
+  // Handle pinch-to-zoom gesture
+  const handleTouchStart = useCallback((e: Konva.KonvaEventObject<TouchEvent>) => {
+    const touches = e.evt.touches;
+    if (touches.length !== 2) return;
+    
+    // Only allow pinch on selected cutout
+    if (!selectedId) return;
+    
+    const placed = placedCutouts.find((p) => p.id === selectedId);
+    if (!placed) return;
+    
+    const touch1 = touches[0];
+    const touch2 = touches[1];
+    const distance = Math.hypot(
+      touch2.clientX - touch1.clientX,
+      touch2.clientY - touch1.clientY
+    );
+    
+    setPinchState({
+      initialDistance: distance,
+      initialScale: placed.transform.scale,
+      placedId: selectedId,
+    });
+    
+    e.evt.preventDefault();
+  }, [selectedId, placedCutouts]);
+
+  const handleTouchMove = useCallback((e: Konva.KonvaEventObject<TouchEvent>) => {
+    if (!pinchState) return;
+    
+    const touches = e.evt.touches;
+    if (touches.length !== 2) return;
+    
+    const touch1 = touches[0];
+    const touch2 = touches[1];
+    const currentDistance = Math.hypot(
+      touch2.clientX - touch1.clientX,
+      touch2.clientY - touch1.clientY
+    );
+    
+    const scaleFactor = currentDistance / pinchState.initialDistance;
+    const newScale = Math.max(0.1, Math.min(5, pinchState.initialScale * scaleFactor));
+    
+    updatePlacedCutout(pinchState.placedId, {
+      transform: { scale: newScale } as Transform,
+    });
+    
+    e.evt.preventDefault();
+  }, [pinchState, updatePlacedCutout]);
+
+  const handleTouchEnd = useCallback(() => {
+    setPinchState(null);
+  }, []);
 
   // Get background color
   const bgColor = canvasConfig.bgColor1;
@@ -281,6 +378,9 @@ export function ArrangeCanvas({ className }: ArrangeCanvasProps) {
         height={dimensions.height}
         onClick={handleStageClick}
         onTap={handleStageClick}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
       >
         <Layer>
           {/* Canvas background - click to deselect */}
@@ -317,38 +417,61 @@ export function ArrangeCanvas({ className }: ArrangeCanvasProps) {
             />
           )}
 
-          {/* Placed cutouts */}
-          {placedCutouts.map((placed) => {
-            const cutoutImg = cutoutImages.get(placed.cutoutId);
-            if (!cutoutImg) return null;
+          {/* Placed cutouts - clipped to canvas area */}
+          <Group
+            clipFunc={(ctx) => {
+              ctx.rect(
+                canvasDimensions.x,
+                canvasDimensions.y,
+                canvasDimensions.width,
+                canvasDimensions.height
+              );
+            }}
+          >
+            {placedCutouts.map((placed) => {
+              const cutoutImg = cutoutImages.get(placed.cutoutId);
+              if (!cutoutImg) return null;
 
-            const props = getCutoutProps(placed, cutoutImg);
-            const isSelected = selectedId === placed.id;
+              const props = getCutoutProps(placed, cutoutImg);
 
-            return (
-              <KonvaImage
-                key={placed.id}
-                id={`cutout-${placed.id}`}
-                image={cutoutImg.image}
-                {...props}
-                draggable
-                onClick={() => {
-                  setSelectedId(placed.id);
-                  selectCutout(placed.cutoutId);
-                }}
-                onTap={() => {
-                  setSelectedId(placed.id);
-                  selectCutout(placed.cutoutId);
-                }}
-                onDragEnd={(e) => handleTransformEnd(placed.id, e.target, placed)}
-                onTransformEnd={(e) => handleTransformEnd(placed.id, e.target, placed)}
-              />
-            );
-          })}
+              return (
+                <KonvaImage
+                  key={placed.id}
+                  id={`cutout-${placed.id}`}
+                  image={cutoutImg.image}
+                  {...props}
+                  draggable
+                  dragBoundFunc={(pos) => {
+                    // Constrain dragging so cutout center stays within canvas
+                    const minX = canvasDimensions.x;
+                    const maxX = canvasDimensions.x + canvasDimensions.width;
+                    const minY = canvasDimensions.y;
+                    const maxY = canvasDimensions.y + canvasDimensions.height;
+                    
+                    return {
+                      x: Math.max(minX, Math.min(maxX, pos.x)),
+                      y: Math.max(minY, Math.min(maxY, pos.y)),
+                    };
+                  }}
+                  onClick={() => {
+                    setSelectedId(placed.id);
+                    selectCutout(placed.cutoutId);
+                  }}
+                  onTap={() => {
+                    setSelectedId(placed.id);
+                    selectCutout(placed.cutoutId);
+                  }}
+                  onDragEnd={(e) => handleTransformEnd(placed.id, e.target, placed)}
+                  onTransformEnd={(e) => handleTransformEnd(placed.id, e.target, placed)}
+                />
+              );
+            })}
+          </Group>
 
           {/* Transformer for selected cutout */}
           <Transformer
             ref={transformerRef}
+            keepRatio={true}
             boundBoxFunc={(oldBox, newBox) => {
               // Limit resize to reasonable bounds
               const minSize = 20;
@@ -364,8 +487,8 @@ export function ArrangeCanvas({ className }: ArrangeCanvasProps) {
               "bottom-left",
               "bottom-right",
             ]}
-            anchorSize={24}
-            anchorCornerRadius={12}
+            anchorSize={32}
+            anchorCornerRadius={16}
             borderStroke="#6366f1"
             borderStrokeWidth={2}
             anchorStroke="#6366f1"

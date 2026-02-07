@@ -28,6 +28,9 @@ import { getAspectRatio } from '@/lib/editor/geometry';
 // =============================================================================
 
 interface EditorActions {
+  // Canvas ID
+  setCanvasId: (id: string | null) => void;
+  
   // Navigation
   setStep: (step: EditorStep) => void;
   
@@ -65,13 +68,13 @@ interface EditorActions {
   reset: () => void;
 }
 
-type EditorStore = EditorState & EditorActions;
+type EditorStore = EditorState & EditorActions & { canvasId: string | null };
 
 // =============================================================================
 // Initial State
 // =============================================================================
 
-const initialState: EditorState = {
+const initialState: EditorState & { canvasId: string | null } = {
   step: 'upload',
   sourceImages: [],
   activeSourceId: null,
@@ -83,6 +86,7 @@ const initialState: EditorState = {
   currentPath: [],
   canvasConfig: { ...DEFAULT_CANVAS_CONFIG },
   isProcessing: false,
+  canvasId: null,
 };
 
 // =============================================================================
@@ -93,6 +97,14 @@ export const useEditorStore = create<EditorStore>()(
   temporal(
     immer((set, get) => ({
       ...initialState,
+
+      // =========================================================================
+      // Canvas ID
+      // =========================================================================
+      
+      setCanvasId: (id) => set((state) => {
+        state.canvasId = id;
+      }),
 
       // =========================================================================
       // Navigation

@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import Providers from "@/components/layout/providers";
 import { Geist, Geist_Mono } from "next/font/google";
-import NavBar from "@/components/layout/navbar";
+import { BottomNav } from "@/components/layout/BottomNav";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -24,7 +24,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "HCB Needlepoint",
+  title: "Needlepoint",
   description: "Turn your photos into custom needlepoint canvases",
   manifest: "/manifest.json",
   appleWebApp: {
@@ -48,12 +48,10 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <Providers>
-          <div className="flex flex-col min-h-screen">
-            <NavBar />
-            <main className="flex-grow">
-              {children}
-            </main>
-          </div>
+          <main className="min-h-screen pb-16 md:pb-0">
+            {children}
+          </main>
+          <BottomNav />
         </Providers>
       </body>
     </html>
