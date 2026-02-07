@@ -3,6 +3,7 @@
 import { useRef, useState, useCallback, useEffect } from "react";
 import { Stage, Layer, Line, Circle, Image as KonvaImage } from "react-konva";
 import { useEditorStore, useActiveSource } from "@/stores/editor-store";
+import { saveCutout } from "@/actions/cutouts";
 import type { Point } from "@/types/editor";
 
 interface LassoCanvasProps {
@@ -173,16 +174,38 @@ export function LassoCanvas({ className, onCutoutComplete }: LassoCanvasProps) {
     [isDrawing, tool, screenToNormalized, continueDrawing]
   );
 
-  const handlePointerUp = useCallback(() => {
+  const handlePointerUp = useCallback(async () => {
     if (!isDrawing) return;
 
-    if (currentPath.length >= MIN_PATH_LENGTH) {
+    if (currentPath.length >= MIN_PATH_LENGTH && activeSource) {
+      // Capture the path before finishDrawing clears it
+      const pathToSave = [...currentPath];
+      
+      // Calculate aspect ratio from path bounds
+      const pathXs = pathToSave.map(p => p.x);
+      const pathYs = pathToSave.map(p => p.y);
+      const pathWidth = Math.max(...pathXs) - Math.min(...pathXs);
+      const pathHeight = Math.max(...pathYs) - Math.min(...pathYs);
+      const aspectRatio = pathHeight / Math.max(pathWidth, 0.001);
+      
+      // Create cutout in store
       finishDrawing();
       onCutoutComplete?.();
+      
+      // Save to database (fire and forget for now)
+      saveCutout({
+        sourceImageId: activeSource.id,
+        path: pathToSave,
+        aspectRatio,
+      }).then((result) => {
+        if (!result.success) {
+          console.error("Failed to save cutout:", result.error);
+        }
+      });
     } else {
       cancelDrawing();
     }
-  }, [isDrawing, currentPath, finishDrawing, cancelDrawing, onCutoutComplete]);
+  }, [isDrawing, currentPath, activeSource, finishDrawing, cancelDrawing, onCutoutComplete]);
 
   // Convert path to flat array for Konva Line
   const pathToPoints = useCallback(
