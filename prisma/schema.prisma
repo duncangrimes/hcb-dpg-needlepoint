@@ -108,12 +108,19 @@ model Cutout {
 
   /// Extracted cutout image URL (with transparency)
   extractedUrl String?
+  
+  /// Thumbnail URL for library display (small preview)
+  thumbnailUrl String?
+  
+  /// Bounding box aspect ratio (height/width)
+  aspectRatio Float @default(1)
 
   placements PlacedCutout[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([userId, createdAt(sort: Desc)])
   @@map("cutouts")
 }
 

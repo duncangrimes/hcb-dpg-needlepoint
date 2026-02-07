@@ -5,6 +5,7 @@ import { useEditorStore, usePlacedCutoutsSorted } from "@/stores/editor-store";
 import { ArrangeCanvas } from "./ArrangeCanvas";
 import { SettingsSheet } from "./SettingsSheet";
 import { LayerPanel } from "./LayerPanel";
+import { CutoutLibrary } from "./CutoutLibrary";
 
 export function ArrangeStep() {
   const setStep = useEditorStore((s) => s.setStep);
@@ -15,6 +16,7 @@ export function ArrangeStep() {
   
   const [showSettings, setShowSettings] = useState(false);
   const [showLayers, setShowLayers] = useState(false);
+  const [showLibrary, setShowLibrary] = useState(false);
 
   return (
     <div className="h-full flex flex-col">
@@ -44,13 +46,19 @@ export function ArrangeStep() {
       {/* Bottom toolbar */}
       <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 safe-area-inset-bottom">
         <div className="flex items-center justify-between gap-2">
-          {/* Left: Add more / Delete */}
+          {/* Left: Add from library / New cutout / Delete */}
           <div className="flex gap-2">
             <button
-              onClick={() => setStep("cutout")}
-              className="touch-target px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg font-medium text-sm"
+              onClick={() => setShowLibrary(true)}
+              className="touch-target px-3 py-2 bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 rounded-lg font-medium text-sm"
             >
-              + Add
+              📚 Library
+            </button>
+            <button
+              onClick={() => setStep("cutout")}
+              className="touch-target px-3 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg font-medium text-sm"
+            >
+              + New
             </button>
             
             {activeCutoutId && (
@@ -99,6 +107,10 @@ export function ArrangeStep() {
       <LayerPanel
         isOpen={showLayers}
         onClose={() => setShowLayers(false)}
+      />
+      <CutoutLibrary
+        isOpen={showLibrary}
+        onClose={() => setShowLibrary(false)}
       />
     </div>
   );
