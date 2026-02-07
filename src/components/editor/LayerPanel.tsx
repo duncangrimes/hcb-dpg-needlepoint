@@ -153,7 +153,7 @@ export function LayerPanel({ isOpen, onClose }: LayerPanelProps) {
                     {/* Info */}
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-gray-900 dark:text-white truncate">
-                        {placed.cutout.name || `Cutout ${actualIndex + 1}`}
+                        Cutout {actualIndex + 1}
                       </p>
                       <p className="text-sm text-gray-500">
                         {placed.widthInches.toFixed(1)}" wide

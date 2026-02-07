@@ -226,7 +226,7 @@ export function ArrangeCanvas({ className }: ArrangeCanvasProps) {
         onTap={handleStageClick}
       >
         <Layer>
-          {/* Canvas background */}
+          {/* Canvas background - click to deselect */}
           <Rect
             x={canvasDimensions.x}
             y={canvasDimensions.y}
@@ -238,6 +238,14 @@ export function ArrangeCanvas({ className }: ArrangeCanvasProps) {
             shadowOpacity={0.2}
             shadowOffset={{ x: 2, y: 2 }}
             cornerRadius={4}
+            onClick={() => {
+              setSelectedId(null);
+              selectCutout(null);
+            }}
+            onTap={() => {
+              setSelectedId(null);
+              selectCutout(null);
+            }}
           />
 
           {/* Pattern overlay for non-solid backgrounds */}

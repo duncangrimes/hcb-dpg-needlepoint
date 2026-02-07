@@ -51,7 +51,6 @@ export interface Cutout {
   id: string;
   sourceImageId: string;
   path: Point[];       // Lasso vertices (normalized 0-1)
-  name?: string;       // User label
   extractedUrl?: string; // Cutout image with transparency
 }
 

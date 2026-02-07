@@ -1,3 +1,14 @@
+/**
+ * ⚠️ VISION FEATURES - NOT IN USE FOR MVP
+ * 
+ * These Gemini-powered features are deferred to post-MVP.
+ * Do not import or use these in the main application flow.
+ * 
+ * Future use cases:
+ * - Vision-guided color palette selection
+ * - AI subject detection for auto-selection
+ */
+
 export { 
   analyzeImageForPalette, 
   hexToRgb,
@@ -16,9 +27,4 @@ export {
   type VisionGuidedResult,
 } from "./guided-quantization";
 
-export {
-  detectSubjects,
-  boundingBoxToPath,
-  type DetectedSubject,
-  type SubjectDetectionResult,
-} from "./subject-detector";
+// Subject detector removed - not in MVP

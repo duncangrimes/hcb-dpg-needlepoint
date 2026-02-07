@@ -39,7 +39,7 @@ interface EditorActions {
   setTool: (tool: EditorTool) => void;
   startDrawing: (point: Point) => void;
   continueDrawing: (point: Point) => void;
-  finishDrawing: (name?: string) => void;
+  finishDrawing: () => void;
   cancelDrawing: () => void;
   
   // Cutouts
@@ -157,7 +157,7 @@ export const useEditorStore = create<EditorStore>()(
         state.currentPath.push(point);
       }),
 
-      finishDrawing: (name) => set((state) => {
+      finishDrawing: () => set((state) => {
         if (!state.isDrawing || state.currentPath.length < 3) {
           state.isDrawing = false;
           state.currentPath = [];
@@ -176,7 +176,6 @@ export const useEditorStore = create<EditorStore>()(
           id: crypto.randomUUID(),
           sourceImageId: activeSourceId,
           path: [...state.currentPath],
-          name,
         };
         state.cutouts.push(newCutout);
 

@@ -91,7 +91,6 @@ export function CutoutLibrary({ isOpen, onClose }: CutoutLibraryProps) {
       id: fullCutout.id,
       sourceImageId: fullCutout.sourceImage.id,
       path: fullCutout.path,
-      name: fullCutout.name || undefined,
       extractedUrl: fullCutout.extractedUrl || undefined,
     };
 
@@ -200,7 +199,7 @@ export function CutoutLibrary({ isOpen, onClose }: CutoutLibraryProps) {
                       {cutout.thumbnailUrl || cutout.extractedUrl ? (
                         <img
                           src={cutout.thumbnailUrl || cutout.extractedUrl || ""}
-                          alt={cutout.name || "Cutout"}
+                          alt="Cutout"
                           className="w-full h-full object-cover"
                         />
                       ) : (
@@ -226,14 +225,6 @@ export function CutoutLibrary({ isOpen, onClose }: CutoutLibraryProps) {
                         </svg>
                       </button>
 
-                      {/* Name badge */}
-                      {cutout.name && (
-                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2">
-                          <p className="text-white text-xs truncate">
-                            {cutout.name}
-                          </p>
-                        </div>
-                      )}
                     </button>
                   ))}
                 </div>

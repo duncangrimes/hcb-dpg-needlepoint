@@ -7,12 +7,13 @@ import type { Point } from "@/types/editor";
 
 interface LassoCanvasProps {
   className?: string;
+  onCutoutComplete?: () => void;
 }
 
 const CLOSE_THRESHOLD = 20; // px to detect path close
 const MIN_PATH_LENGTH = 10; // minimum points for valid lasso
 
-export function LassoCanvas({ className }: LassoCanvasProps) {
+export function LassoCanvas({ className, onCutoutComplete }: LassoCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
@@ -176,17 +177,12 @@ export function LassoCanvas({ className }: LassoCanvasProps) {
     if (!isDrawing) return;
 
     if (currentPath.length >= MIN_PATH_LENGTH) {
-      const lastPoint = currentPath[currentPath.length - 1];
-      if (isNearStart(lastPoint)) {
-        finishDrawing();
-      } else {
-        // Auto-close if enough points
-        finishDrawing();
-      }
+      finishDrawing();
+      onCutoutComplete?.();
     } else {
       cancelDrawing();
     }
-  }, [isDrawing, currentPath, isNearStart, finishDrawing, cancelDrawing]);
+  }, [isDrawing, currentPath, finishDrawing, cancelDrawing, onCutoutComplete]);
 
   // Convert path to flat array for Konva Line
   const pathToPoints = useCallback(
