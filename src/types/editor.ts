@@ -61,6 +61,10 @@ export interface PlacedCutout {
   cutout: Cutout;
   transform: Transform;
   zIndex: number;
+  
+  // Physical sizing (for consistent mesh sizing)
+  widthInches: number;  // Base width in inches at scale=1
+  aspectRatio: number;  // height/width ratio from original cutout bounds
 }
 
 // =============================================================================

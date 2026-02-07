@@ -58,12 +58,12 @@ export async function generateCanvasAction(
       const sourceDataUrl = sourceImages[placed.cutout.sourceImageId];
       if (!sourceDataUrl) continue;
 
-      // Extract and composite the cutout
+      // Extract and composite the cutout with proper mesh sizing
       canvas = await compositeCutout(
         canvas,
         sourceDataUrl,
-        placed.cutout.path,
-        placed.transform,
+        placed,
+        canvasConfig.meshCount,
         widthStitches,
         heightStitches
       );
@@ -168,15 +168,20 @@ async function createBackgroundCanvas(
 
 /**
  * Extract cutout from source and composite onto canvas
+ * 
+ * @param placed - The placed cutout with physical sizing info
+ * @param meshCount - Stitches per inch for consistent sizing
  */
 async function compositeCutout(
   canvas: Buffer,
   sourceDataUrl: string,
-  path: Point[],
-  transform: PlacedCutout["transform"],
+  placed: PlacedCutout,
+  meshCount: number,
   canvasWidth: number,
   canvasHeight: number
 ): Promise<Buffer> {
+  const { path } = placed.cutout;
+  const { transform, widthInches, aspectRatio } = placed;
   // Parse source image data URL
   const matches = sourceDataUrl.match(/^data:(.+);base64,(.+)$/);
   if (!matches) return canvas;
@@ -241,16 +246,20 @@ async function compositeCutout(
     rgba[i * 4 + 3] = mask[i];
   }
 
-  // Calculate target size on canvas
-  const cutoutAspect = cropWidth / cropHeight;
-  const targetHeight = Math.round(canvasHeight * 0.4 * transform.scale);
-  const targetWidth = Math.round(targetHeight * cutoutAspect);
+  // Calculate target size in stitches based on physical dimensions
+  // widthInches * meshCount * scale = target width in stitches
+  const targetWidth = Math.round(widthInches * meshCount * transform.scale);
+  const targetHeight = Math.round(targetWidth * aspectRatio);
+  
+  // Clamp to reasonable bounds (at least 1 stitch, at most canvas size)
+  const clampedWidth = Math.max(1, Math.min(targetWidth, canvasWidth));
+  const clampedHeight = Math.max(1, Math.min(targetHeight, canvasHeight));
 
   // Resize and rotate the cutout
   let cutoutSharp = sharp(rgba, {
     raw: { width: cropped.info.width, height: cropped.info.height, channels: 4 },
   })
-    .resize(targetWidth, targetHeight, { fit: "fill" });
+    .resize(clampedWidth, clampedHeight, { fit: "fill" });
 
   if (transform.rotation !== 0) {
     cutoutSharp = cutoutSharp.rotate(transform.rotation, {
@@ -268,9 +277,9 @@ async function compositeCutout(
 
   const cutoutBuffer = await cutoutSharp.png().toBuffer();
 
-  // Calculate position on canvas
-  const posX = Math.round(transform.x * canvasWidth - targetWidth / 2);
-  const posY = Math.round(transform.y * canvasHeight - targetHeight / 2);
+  // Calculate position on canvas (centered on transform position)
+  const posX = Math.round(transform.x * canvasWidth - clampedWidth / 2);
+  const posY = Math.round(transform.y * canvasHeight - clampedHeight / 2);
 
   // Composite onto canvas
   return sharp(canvas)

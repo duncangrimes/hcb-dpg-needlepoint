@@ -180,6 +180,16 @@ export const useEditorStore = create<EditorStore>()(
         };
         state.cutouts.push(newCutout);
 
+        // Calculate aspect ratio from path bounds
+        const pathXs = state.currentPath.map(p => p.x);
+        const pathYs = state.currentPath.map(p => p.y);
+        const pathWidth = Math.max(...pathXs) - Math.min(...pathXs);
+        const pathHeight = Math.max(...pathYs) - Math.min(...pathYs);
+        const aspectRatio = pathHeight / Math.max(pathWidth, 0.001);
+        
+        // Default width: 40% of canvas width
+        const defaultWidthInches = state.canvasConfig.widthInches * 0.4;
+
         // Auto-place on canvas
         const newPlacement: PlacedCutout = {
           id: crypto.randomUUID(),
@@ -187,6 +197,8 @@ export const useEditorStore = create<EditorStore>()(
           cutout: newCutout,
           transform: { ...DEFAULT_TRANSFORM },
           zIndex: state.placedCutouts.length,
+          widthInches: defaultWidthInches,
+          aspectRatio,
         };
         state.placedCutouts.push(newPlacement);
         state.activeCutoutId = newCutout.id;
@@ -246,12 +258,24 @@ export const useEditorStore = create<EditorStore>()(
         const existing = state.placedCutouts.find((pc) => pc.cutoutId === cutoutId);
         if (existing) return;
 
+        // Calculate aspect ratio from path bounds
+        const pathXs = cutout.path.map(p => p.x);
+        const pathYs = cutout.path.map(p => p.y);
+        const pathWidth = Math.max(...pathXs) - Math.min(...pathXs);
+        const pathHeight = Math.max(...pathYs) - Math.min(...pathYs);
+        const aspectRatio = pathHeight / Math.max(pathWidth, 0.001);
+        
+        // Default width: 40% of canvas width
+        const defaultWidthInches = state.canvasConfig.widthInches * 0.4;
+
         const newPlacement: PlacedCutout = {
           id: crypto.randomUUID(),
           cutoutId,
           cutout,
           transform: { ...DEFAULT_TRANSFORM, ...transform },
           zIndex: state.placedCutouts.length,
+          widthInches: defaultWidthInches,
+          aspectRatio,
         };
         state.placedCutouts.push(newPlacement);
       }),
@@ -264,6 +288,12 @@ export const useEditorStore = create<EditorStore>()(
           }
           if (updates.zIndex !== undefined) {
             placement.zIndex = updates.zIndex;
+          }
+          if (updates.widthInches !== undefined) {
+            placement.widthInches = updates.widthInches;
+          }
+          if (updates.aspectRatio !== undefined) {
+            placement.aspectRatio = updates.aspectRatio;
           }
         }
       }),

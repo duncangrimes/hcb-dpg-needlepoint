@@ -148,27 +148,35 @@ export function ArrangeCanvas({ className }: ArrangeCanvasProps) {
 
   // Handle cutout transform (drag, scale, rotate)
   const handleTransformEnd = useCallback(
-    (placedId: string, node: Konva.Node) => {
+    (placedId: string, node: Konva.Node, placed: PlacedCutout) => {
       const scaleX = node.scaleX();
       const scaleY = node.scaleY();
+      
+      // Calculate new physical width based on node's current dimensions
+      const pixelsPerInch = canvasDimensions.width / canvasConfig.widthInches;
+      const currentDisplayWidth = node.width() * Math.abs(scaleX);
+      const newWidthInches = currentDisplayWidth / pixelsPerInch;
       
       // Convert position to normalized (0-1) relative to canvas
       const newTransform: Partial<Transform> = {
         x: (node.x() - canvasDimensions.x) / canvasDimensions.width,
         y: (node.y() - canvasDimensions.y) / canvasDimensions.height,
-        scale: Math.abs(scaleX), // Take absolute value
+        scale: 1, // Reset scale since we're updating widthInches directly
         rotation: node.rotation(),
         flipX: scaleX < 0,
         flipY: scaleY < 0,
       };
 
-      // Reset scale on node (we store scale in transform state)
+      // Reset scale on node
       node.scaleX(scaleX < 0 ? -1 : 1);
       node.scaleY(scaleY < 0 ? -1 : 1);
 
-      updatePlacedCutout(placedId, { transform: newTransform as Transform });
+      updatePlacedCutout(placedId, { 
+        transform: newTransform as Transform,
+        widthInches: newWidthInches,
+      });
     },
-    [canvasDimensions, updatePlacedCutout]
+    [canvasDimensions, canvasConfig.widthInches, updatePlacedCutout]
   );
 
   // Handle stage click (deselect when clicking empty space)
@@ -180,17 +188,17 @@ export function ArrangeCanvas({ className }: ArrangeCanvasProps) {
   }, [selectCutout]);
 
   // Calculate cutout position and size on canvas
+  // Uses physical dimensions (inches) for consistent mesh sizing
   const getCutoutProps = (placed: PlacedCutout, cutoutImg: CutoutImage) => {
-    const { transform } = placed;
+    const { transform, widthInches, aspectRatio } = placed;
     
-    // Base size: scale cutout to reasonable portion of canvas
-    const baseScale = Math.min(
-      canvasDimensions.width * 0.4 / cutoutImg.naturalWidth,
-      canvasDimensions.height * 0.4 / cutoutImg.naturalHeight
-    );
+    // Convert physical inches to display pixels
+    // canvasDimensions.width pixels = canvasConfig.widthInches inches
+    const pixelsPerInch = canvasDimensions.width / canvasConfig.widthInches;
     
-    const width = cutoutImg.naturalWidth * baseScale * transform.scale;
-    const height = cutoutImg.naturalHeight * baseScale * transform.scale;
+    // Calculate display size from physical dimensions
+    const width = widthInches * pixelsPerInch * transform.scale;
+    const height = width * aspectRatio;
 
     return {
       x: canvasDimensions.x + transform.x * canvasDimensions.width,
@@ -267,8 +275,8 @@ export function ArrangeCanvas({ className }: ArrangeCanvasProps) {
                   setSelectedId(placed.id);
                   selectCutout(placed.cutoutId);
                 }}
-                onDragEnd={(e) => handleTransformEnd(placed.id, e.target)}
-                onTransformEnd={(e) => handleTransformEnd(placed.id, e.target)}
+                onDragEnd={(e) => handleTransformEnd(placed.id, e.target, placed)}
+                onTransformEnd={(e) => handleTransformEnd(placed.id, e.target, placed)}
               />
             );
           })}
