@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useEditorStore, usePlacedCutoutsSorted } from "@/stores/editor-store";
 import { ArrangeCanvas } from "./ArrangeCanvas";
 import { SettingsSheet } from "./SettingsSheet";
+import { LayerPanel } from "./LayerPanel";
 
 export function ArrangeStep() {
   const setStep = useEditorStore((s) => s.setStep);
@@ -13,6 +14,7 @@ export function ArrangeStep() {
   const removeCutout = useEditorStore((s) => s.removeCutout);
   
   const [showSettings, setShowSettings] = useState(false);
+  const [showLayers, setShowLayers] = useState(false);
 
   return (
     <div className="h-full flex flex-col">
@@ -71,20 +73,32 @@ export function ArrangeStep() {
             </span>
           </div>
 
-          {/* Right: Settings */}
-          <button
-            onClick={() => setShowSettings(true)}
-            className="touch-target px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg font-medium text-sm"
-          >
-            ⚙️ Settings
-          </button>
+          {/* Right: Layers + Settings */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowLayers(true)}
+              className="touch-target px-3 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg font-medium text-sm"
+            >
+              📚 {placedCutouts.length}
+            </button>
+            <button
+              onClick={() => setShowSettings(true)}
+              className="touch-target px-3 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg font-medium text-sm"
+            >
+              ⚙️
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Settings bottom sheet */}
+      {/* Bottom sheets */}
       <SettingsSheet 
         isOpen={showSettings} 
         onClose={() => setShowSettings(false)} 
+      />
+      <LayerPanel
+        isOpen={showLayers}
+        onClose={() => setShowLayers(false)}
       />
     </div>
   );
