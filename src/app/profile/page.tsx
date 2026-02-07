@@ -74,7 +74,7 @@ export default async function ProfilePage() {
         >
           <button
             type="submit"
-            className="w-full py-4 bg-white dark:bg-stone-800 text-red-500 rounded-xl font-medium shadow-sm hover:bg-red-50 dark:hover:bg-red-900/20 transition"
+            className="w-full py-4 bg-white dark:bg-stone-800 text-error rounded-xl font-medium shadow-sm hover:bg-error-light dark:hover:bg-error/20 transition"
           >
             Sign Out
           </button>

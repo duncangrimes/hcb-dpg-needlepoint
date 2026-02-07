@@ -111,7 +111,7 @@ export function DashboardContent() {
           </div>
         ) : error ? (
           <div className="text-center py-20">
-            <p className="text-red-500 mb-4">{error}</p>
+            <p className="text-error mb-4">{error}</p>
             <button
               onClick={loadCanvases}
               className="px-4 py-2 bg-terracotta-600 text-white rounded-lg"
@@ -230,10 +230,10 @@ function CanvasCard({
         {canvas.status !== "DRAFT" && (
           <div className={`absolute top-2 left-2 px-2 py-0.5 rounded text-xs font-medium ${
             canvas.status === "COMPLETE" 
-              ? "bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-400"
+              ? "bg-success-light text-success-dark dark:bg-success/20 dark:text-success-light"
               : canvas.status === "PROCESSING"
-              ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/50 dark:text-yellow-400"
-              : "bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-400"
+              ? "bg-warning-light text-warning-dark dark:bg-warning/20 dark:text-warning-light"
+              : "bg-error-light text-error-dark dark:bg-error/20 dark:text-error-light"
           }`}>
             {canvas.status.toLowerCase()}
           </div>

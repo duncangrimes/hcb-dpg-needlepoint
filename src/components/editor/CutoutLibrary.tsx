@@ -141,18 +141,18 @@ export function CutoutLibrary({ isOpen, onClose }: CutoutLibraryProps) {
 
       {/* Panel */}
       <div className="fixed inset-x-0 bottom-0 z-50 animate-slide-up">
-        <div className="bg-white dark:bg-gray-900 rounded-t-2xl shadow-xl max-h-[75vh] flex flex-col safe-area-inset-bottom">
+        <div className="bg-white dark:bg-stone-900 rounded-t-2xl shadow-xl max-h-[75vh] flex flex-col safe-area-inset-bottom">
           {/* Handle */}
           <div className="flex justify-center pt-3 pb-2 flex-shrink-0">
-            <div className="w-10 h-1 bg-gray-300 dark:bg-gray-700 rounded-full" />
+            <div className="w-10 h-1 bg-stone-300 dark:bg-stone-700 rounded-full" />
           </div>
 
           {/* Header */}
-          <div className="flex items-center justify-between px-5 pb-3 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+          <div className="flex items-center justify-between px-5 pb-3 border-b border-stone-200 dark:border-stone-700 flex-shrink-0">
             <h2 className="text-lg font-semibold">Your Cutouts</h2>
             <button
               onClick={onClose}
-              className="text-indigo-600 dark:text-indigo-400 font-medium"
+              className="text-terracotta-600 dark:text-terracotta-400 font-medium"
             >
               Done
             </button>
@@ -166,14 +166,14 @@ export function CutoutLibrary({ isOpen, onClose }: CutoutLibraryProps) {
           >
             {loading ? (
               <div className="flex items-center justify-center py-12">
-                <div className="animate-spin w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full" />
+                <div className="animate-spin w-8 h-8 border-3 border-terracotta-500 border-t-transparent rounded-full" />
               </div>
             ) : error ? (
               <div className="text-center py-12">
-                <p className="text-red-500 mb-4">{error}</p>
+                <p className="text-error mb-4">{error}</p>
                 <button
                   onClick={() => loadCutouts()}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg"
+                  className="px-4 py-2 bg-terracotta-500 text-white rounded-lg"
                 >
                   Retry
                 </button>
@@ -181,8 +181,8 @@ export function CutoutLibrary({ isOpen, onClose }: CutoutLibraryProps) {
             ) : cutouts.length === 0 ? (
               <div className="text-center py-12">
                 <p className="text-4xl mb-3">✂️</p>
-                <p className="text-gray-500">No cutouts yet</p>
-                <p className="text-sm text-gray-400 mt-1">
+                <p className="text-stone-500">No cutouts yet</p>
+                <p className="text-sm text-stone-400 mt-1">
                   Create cutouts from the editor to see them here
                 </p>
               </div>
@@ -193,7 +193,7 @@ export function CutoutLibrary({ isOpen, onClose }: CutoutLibraryProps) {
                     <button
                       key={cutout.id}
                       onClick={() => handleSelectCutout(cutout)}
-                      className="relative aspect-square rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800 group hover:ring-2 hover:ring-indigo-500 transition-all"
+                      className="relative aspect-square rounded-xl overflow-hidden bg-stone-100 dark:bg-stone-800 group hover:ring-2 hover:ring-terracotta-500 transition-all"
                     >
                       {/* Thumbnail */}
                       {cutout.thumbnailUrl || cutout.extractedUrl ? (
@@ -203,7 +203,7 @@ export function CutoutLibrary({ isOpen, onClose }: CutoutLibraryProps) {
                           className="w-full h-full object-cover"
                         />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center text-gray-400">
+                        <div className="w-full h-full flex items-center justify-center text-stone-400">
                           <span className="text-2xl">✂️</span>
                         </div>
                       )}
@@ -218,7 +218,7 @@ export function CutoutLibrary({ isOpen, onClose }: CutoutLibraryProps) {
                       {/* Delete button */}
                       <button
                         onClick={(e) => handleDelete(cutout.id, e)}
-                        className="absolute top-1 right-1 p-1.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="absolute top-1 right-1 p-1.5 bg-error text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
                       >
                         <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor">
                           <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
@@ -232,13 +232,13 @@ export function CutoutLibrary({ isOpen, onClose }: CutoutLibraryProps) {
                 {/* Loading more indicator */}
                 {loadingMore && (
                   <div className="flex justify-center py-4">
-                    <div className="animate-spin w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full" />
+                    <div className="animate-spin w-6 h-6 border-2 border-terracotta-500 border-t-transparent rounded-full" />
                   </div>
                 )}
 
                 {/* End of list */}
                 {!hasMore && cutouts.length > 0 && (
-                  <p className="text-center text-sm text-gray-400 py-4">
+                  <p className="text-center text-sm text-stone-400 py-4">
                     {cutouts.length} cutout{cutouts.length !== 1 ? "s" : ""}
                   </p>
                 )}

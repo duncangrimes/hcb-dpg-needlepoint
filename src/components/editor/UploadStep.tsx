@@ -124,17 +124,17 @@ export function UploadStep() {
       <div className="max-w-md w-full space-y-8 text-center">
         {/* Logo/Title */}
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+          <h1 className="text-3xl font-bold text-stone-900 dark:text-white">
             🧵 Needlepoint
           </h1>
-          <p className="mt-2 text-gray-600 dark:text-gray-400">
+          <p className="mt-2 text-stone-600 dark:text-stone-400">
             Turn your photos into custom needlepoint canvases
           </p>
         </div>
 
         {/* Error message */}
         {error && (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 text-red-700 dark:text-red-400 text-sm">
+          <div className="bg-error-light dark:bg-error/20 border border-error/30 dark:border-error-dark rounded-lg p-3 text-error dark:text-error-light text-sm">
             {error}
           </div>
         )}
@@ -145,7 +145,7 @@ export function UploadStep() {
           <button
             onClick={() => cameraInputRef.current?.click()}
             disabled={isUploading}
-            className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-indigo-600 text-white rounded-xl font-medium text-lg hover:bg-indigo-700 active:scale-[0.98] transition touch-target disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-terracotta-500 text-white rounded-xl font-medium text-lg hover:bg-terracotta-600 active:scale-[0.98] transition touch-target disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isUploading ? (
               <>
@@ -172,7 +172,7 @@ export function UploadStep() {
           <button
             onClick={() => libraryInputRef.current?.click()}
             disabled={isUploading}
-            className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-white dark:bg-gray-800 text-gray-900 dark:text-white border-2 border-gray-200 dark:border-gray-700 rounded-xl font-medium text-lg hover:bg-gray-50 dark:hover:bg-gray-700 active:scale-[0.98] transition touch-target disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-white dark:bg-stone-800 text-stone-900 dark:text-white border-2 border-stone-200 dark:border-stone-700 rounded-xl font-medium text-lg hover:bg-stone-50 dark:hover:bg-stone-700 active:scale-[0.98] transition touch-target disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <span className="text-2xl">🖼️</span>
             Choose from Library
@@ -187,7 +187,7 @@ export function UploadStep() {
         </div>
 
         {/* Hint */}
-        <p className="text-sm text-gray-500 dark:text-gray-400">
+        <p className="text-sm text-stone-500 dark:text-stone-400">
           Tip: Photos with clear subjects work best
         </p>
       </div>

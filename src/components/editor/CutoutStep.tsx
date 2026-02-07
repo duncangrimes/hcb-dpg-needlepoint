@@ -13,7 +13,7 @@ export function CutoutStep() {
   if (!activeSource) {
     return (
       <div className="h-full flex items-center justify-center">
-        <p className="text-gray-500">No image selected</p>
+        <p className="text-stone-500">No image selected</p>
       </div>
     );
   }

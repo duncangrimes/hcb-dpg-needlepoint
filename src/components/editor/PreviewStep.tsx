@@ -97,7 +97,7 @@ export function PreviewStep() {
   // Render stitchability score bar
   const renderStitchabilityBar = (score: number) => {
     const percentage = (score / 10) * 100;
-    const color = score >= 7 ? "bg-sage-500" : score >= 5 ? "bg-amber-500" : "bg-red-500";
+    const color = score >= 7 ? "bg-sage-500" : score >= 5 ? "bg-amber-500" : "bg-error";
     const label = score >= 7 ? "Excellent" : score >= 5 ? "Good" : "Needs Work";
 
     return (
@@ -173,7 +173,7 @@ export function PreviewStep() {
 
           {/* Error message */}
           {error && (
-            <div className="bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 px-4 py-2 rounded-lg text-sm">
+            <div className="bg-error-light dark:bg-error/30 text-error-dark dark:text-error-light px-4 py-2 rounded-lg text-sm">
               {error}
             </div>
           )}

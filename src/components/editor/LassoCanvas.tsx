@@ -273,7 +273,7 @@ export function LassoCanvas({ className, onCutoutComplete }: LassoCanvasProps) {
   if (!activeSource) {
     return (
       <div className={className}>
-        <div className="h-full flex items-center justify-center text-gray-500">
+        <div className="h-full flex items-center justify-center text-stone-500">
           No image loaded
         </div>
       </div>
@@ -312,13 +312,13 @@ export function LassoCanvas({ className, onCutoutComplete }: LassoCanvasProps) {
               key={cutout.id}
               points={pathToPoints(cutout.path)}
               closed
-              stroke={activeCutoutId === cutout.id ? "#6366f1" : "#22c55e"}
+              stroke={activeCutoutId === cutout.id ? "#E86142" : "#7A8A5E"}
               strokeWidth={activeCutoutId === cutout.id ? 3 : 2}
               dash={[5, 5]}
               fill={
                 activeCutoutId === cutout.id
-                  ? "rgba(99, 102, 241, 0.2)"
-                  : "rgba(34, 197, 94, 0.15)"
+                  ? "rgba(232, 97, 66, 0.2)"
+                  : "rgba(122, 138, 94, 0.15)"
               }
               onClick={() => selectCutout(cutout.id)}
               onTap={() => selectCutout(cutout.id)}
@@ -331,7 +331,7 @@ export function LassoCanvas({ className, onCutoutComplete }: LassoCanvasProps) {
             <>
               <Line
                 points={pathToPoints(currentPath)}
-                stroke="#f59e0b"
+                stroke="#FBBF24"
                 strokeWidth={2}
                 dash={[4, 4]}
                 lineCap="round"
@@ -343,9 +343,9 @@ export function LassoCanvas({ className, onCutoutComplete }: LassoCanvasProps) {
                   x={normalizedToScreen(currentPath[0]).x}
                   y={normalizedToScreen(currentPath[0]).y}
                   radius={CLOSE_THRESHOLD / 2}
-                  stroke="#f59e0b"
+                  stroke="#FBBF24"
                   strokeWidth={2}
-                  fill="rgba(245, 158, 11, 0.3)"
+                  fill="rgba(251, 191, 36, 0.3)"
                 />
               )}
             </>

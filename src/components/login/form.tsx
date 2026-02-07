@@ -120,7 +120,7 @@ export function LoginForm() {
             </div>
 
             {errorMessage && (
-              <p className="text-sm text-red-500 dark:text-red-400">
+              <p className="text-sm text-error dark:text-error-light">
                 {errorMessage}
               </p>
             )}

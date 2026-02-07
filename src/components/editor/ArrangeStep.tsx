@@ -22,42 +22,42 @@ export function ArrangeStep() {
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-stone-200 dark:border-stone-700">
         <button
           onClick={() => setStep("cutout")}
-          className="text-indigo-600 dark:text-indigo-400 font-medium"
+          className="text-terracotta-600 dark:text-terracotta-400 font-medium"
         >
           ← Back
         </button>
-        <span className="text-sm text-gray-500">
+        <span className="text-sm text-stone-500">
           Drag & pinch to arrange
         </span>
         <button
           onClick={() => setStep("preview")}
           disabled={placedCutouts.length === 0}
-          className="text-indigo-600 dark:text-indigo-400 font-medium disabled:opacity-50"
+          className="text-terracotta-600 dark:text-terracotta-400 font-medium disabled:opacity-50"
         >
           Preview →
         </button>
       </div>
 
       {/* Canvas preview area */}
-      <ArrangeCanvas className="flex-1 overflow-hidden bg-gray-100 dark:bg-gray-800" />
+      <ArrangeCanvas className="flex-1 overflow-hidden bg-stone-100 dark:bg-stone-800" />
 
       {/* Bottom toolbar */}
-      <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 safe-area-inset-bottom">
+      <div className="px-4 py-3 border-t border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 safe-area-inset-bottom">
         <div className="flex items-center justify-between gap-2">
           {/* Left: Add from library / New cutout / Delete */}
           <div className="flex gap-2">
             <button
               onClick={() => setShowLibrary(true)}
-              className="touch-target px-3 py-2 bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 rounded-lg font-medium text-sm"
+              className="touch-target px-3 py-2 bg-terracotta-100 dark:bg-terracotta-900 text-terracotta-700 dark:text-terracotta-300 rounded-lg font-medium text-sm"
             >
               📚 Library
             </button>
             <button
               onClick={() => setStep("cutout")}
-              className="touch-target px-3 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg font-medium text-sm"
+              className="touch-target px-3 py-2 bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300 rounded-lg font-medium text-sm"
             >
               + New
             </button>
@@ -71,7 +71,7 @@ export function ArrangeStep() {
                     removePlacedCutout(placement.id);
                   }
                 }}
-                className="touch-target px-3 py-2 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-lg font-medium text-sm"
+                className="touch-target px-3 py-2 bg-error-light dark:bg-error/30 text-error dark:text-error-light rounded-lg font-medium text-sm"
               >
                 🗑️
               </button>
@@ -79,11 +79,11 @@ export function ArrangeStep() {
           </div>
           
           {/* Center: Canvas info */}
-          <div className="flex gap-2 text-xs text-gray-500">
-            <span className="px-2 py-1 bg-gray-100 dark:bg-gray-800 rounded">
+          <div className="flex gap-2 text-xs text-stone-500">
+            <span className="px-2 py-1 bg-stone-100 dark:bg-stone-800 rounded">
               {canvasConfig.widthInches}×{canvasConfig.heightInches}"
             </span>
-            <span className="px-2 py-1 bg-gray-100 dark:bg-gray-800 rounded">
+            <span className="px-2 py-1 bg-stone-100 dark:bg-stone-800 rounded">
               {canvasConfig.meshCount}ct
             </span>
           </div>
@@ -92,13 +92,13 @@ export function ArrangeStep() {
           <div className="flex gap-2">
             <button
               onClick={() => setShowLayers(true)}
-              className="touch-target px-3 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg font-medium text-sm"
+              className="touch-target px-3 py-2 bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300 rounded-lg font-medium text-sm"
             >
               📚 {placedCutouts.length}
             </button>
             <button
               onClick={() => setShowSettings(true)}
-              className="touch-target px-3 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg font-medium text-sm"
+              className="touch-target px-3 py-2 bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300 rounded-lg font-medium text-sm"
             >
               ⚙️
             </button>

@@ -43,6 +43,39 @@
   --color-amber-800: #92400E;
   --color-amber-900: #78350F;
 
+  /* Neutral - Stone (warm grays) */
+  --color-stone-50: #FAFAF8;
+  --color-stone-100: #F5F4F0;
+  --color-stone-200: #E8E6E0;
+  --color-stone-300: #D4D1C8;
+  --color-stone-400: #A8A49A;
+  --color-stone-500: #7A756C;
+  --color-stone-600: #5C5850;
+  --color-stone-700: #45423C;
+  --color-stone-800: #2D2B27;
+  --color-stone-900: #1E1D1A;
+  --color-stone-950: #0F0E0D;
+
+  /* Semantic - Success (Moss) */
+  --color-success-light: #D1FAE5;
+  --color-success: #059669;
+  --color-success-dark: #047857;
+
+  /* Semantic - Error (Berry) */
+  --color-error-light: #FEE2E2;
+  --color-error: #DC2626;
+  --color-error-dark: #B91C1C;
+
+  /* Semantic - Warning (Honey) */
+  --color-warning-light: #FEF3C7;
+  --color-warning: #D97706;
+  --color-warning-dark: #B45309;
+
+  /* Semantic - Info (Indigo Stitch) */
+  --color-info-light: #E0E7FF;
+  --color-info: #4F46E5;
+  --color-info-dark: #4338CA;
+
   /* Fonts */
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);

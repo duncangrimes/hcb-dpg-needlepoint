@@ -71,9 +71,9 @@ export function ClipModal({ isOpen, onClose, onGoToCanvas }: ClipModalProps) {
             leaveFrom="opacity-100 scale-100"
             leaveTo="opacity-0 scale-95"
           >
-            <DialogPanel className="h-full w-full bg-gray-900 flex flex-col">
+            <DialogPanel className="h-full w-full bg-stone-900 flex flex-col">
               {/* Header */}
-              <div className="flex items-center justify-between px-4 py-3 bg-gray-800">
+              <div className="flex items-center justify-between px-4 py-3 bg-stone-800">
                 <button
                   onClick={onClose}
                   className="text-white font-medium"
@@ -83,7 +83,7 @@ export function ClipModal({ isOpen, onClose, onGoToCanvas }: ClipModalProps) {
                 <DialogTitle className="text-white font-medium">
                   Draw Selection
                 </DialogTitle>
-                <div className="w-16 text-right text-sm text-gray-400">
+                <div className="w-16 text-right text-sm text-stone-400">
                   {cutoutCount} cutout{cutoutCount !== 1 ? "s" : ""}
                 </div>
               </div>
@@ -106,19 +106,19 @@ export function ClipModal({ isOpen, onClose, onGoToCanvas }: ClipModalProps) {
               </div>
 
               {/* Bottom toolbar */}
-              <div className="px-4 py-3 bg-gray-800 safe-area-inset-bottom">
+              <div className="px-4 py-3 bg-stone-800 safe-area-inset-bottom">
                 {showActions && cutoutCount > 0 ? (
                   /* Action buttons after completing a cutout */
                   <div className="flex gap-3">
                     <button
                       onClick={handleContinueClipping}
-                      className="flex-1 py-3 bg-gray-700 text-white rounded-xl font-medium"
+                      className="flex-1 py-3 bg-stone-700 text-white rounded-xl font-medium"
                     >
                       ✂️ Add Another Cutout
                     </button>
                     <button
                       onClick={handleGoToCanvas}
-                      className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-medium"
+                      className="flex-1 py-3 bg-terracotta-500 text-white rounded-xl font-medium"
                     >
                       Go to Canvas →
                     </button>
@@ -131,8 +131,8 @@ export function ClipModal({ isOpen, onClose, onGoToCanvas }: ClipModalProps) {
                         onClick={() => setTool("lasso")}
                         className={`px-4 py-2 rounded-lg font-medium ${
                           tool === "lasso"
-                            ? "bg-indigo-600 text-white"
-                            : "bg-gray-700 text-gray-300"
+                            ? "bg-terracotta-500 text-white"
+                            : "bg-stone-700 text-stone-300"
                         }`}
                       >
                         ✏️ Lasso
@@ -140,7 +140,7 @@ export function ClipModal({ isOpen, onClose, onGoToCanvas }: ClipModalProps) {
                       <button
                         onClick={() => undo()}
                         disabled={!canUndo}
-                        className="px-4 py-2 bg-gray-700 text-gray-300 rounded-lg font-medium disabled:opacity-40"
+                        className="px-4 py-2 bg-stone-700 text-stone-300 rounded-lg font-medium disabled:opacity-40"
                       >
                         ↩️ Undo
                       </button>
@@ -148,7 +148,7 @@ export function ClipModal({ isOpen, onClose, onGoToCanvas }: ClipModalProps) {
                       {activeCutoutId && (
                         <button
                           onClick={() => removeCutout(activeCutoutId)}
-                          className="px-4 py-2 bg-red-600/80 text-white rounded-lg font-medium"
+                          className="px-4 py-2 bg-error/80 text-white rounded-lg font-medium"
                         >
                           🗑️
                         </button>
@@ -158,7 +158,7 @@ export function ClipModal({ isOpen, onClose, onGoToCanvas }: ClipModalProps) {
                     {cutoutCount > 0 && (
                       <button
                         onClick={handleGoToCanvas}
-                        className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium"
+                        className="px-4 py-2 bg-terracotta-500 text-white rounded-lg font-medium"
                       >
                         Done →
                       </button>

@@ -349,7 +349,7 @@ export function ArrangeCanvas({ className }: ArrangeCanvasProps) {
         <div className="h-full flex items-center justify-center">
           <div className="text-center">
             <div className="animate-spin text-4xl mb-2">⏳</div>
-            <p className="text-gray-500">Loading cutouts...</p>
+            <p className="text-stone-500">Loading cutouts...</p>
           </div>
         </div>
       </div>
@@ -361,7 +361,7 @@ export function ArrangeCanvas({ className }: ArrangeCanvasProps) {
     return (
       <div ref={containerRef} className={className}>
         <div className="h-full flex items-center justify-center">
-          <div className="text-center text-red-500">
+          <div className="text-center text-error">
             <p className="text-xl mb-2">⚠️</p>
             <p>{extractionError}</p>
           </div>
@@ -489,9 +489,9 @@ export function ArrangeCanvas({ className }: ArrangeCanvasProps) {
             ]}
             anchorSize={32}
             anchorCornerRadius={16}
-            borderStroke="#6366f1"
+            borderStroke="#E86142"
             borderStrokeWidth={2}
-            anchorStroke="#6366f1"
+            anchorStroke="#E86142"
             anchorFill="#ffffff"
           />
         </Layer>
