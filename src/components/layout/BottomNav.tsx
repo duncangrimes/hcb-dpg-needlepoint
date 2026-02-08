@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useSession } from "next-auth/react";
 
 interface NavItem {
   href: string;
@@ -10,34 +11,52 @@ interface NavItem {
   activeIcon: React.ReactNode;
 }
 
-const navItems: NavItem[] = [
-  {
-    href: "/dashboard",
-    label: "Home",
-    icon: <HomeIcon />,
-    activeIcon: <HomeIconFilled />,
-  },
-  {
-    href: "/editor",
-    label: "Create",
-    icon: <PlusCircleIcon />,
-    activeIcon: <PlusCircleIconFilled />,
-  },
-  {
-    href: "/profile",
-    label: "Profile",
-    icon: <UserIcon />,
-    activeIcon: <UserIconFilled />,
-  },
-];
-
 export function BottomNav() {
   const pathname = usePathname();
+  const { data: session } = useSession();
+  const isAuthenticated = !!session?.user;
 
   // Don't show bottom nav on login page
   if (pathname === "/login") {
     return null;
   }
+
+  // Nav items depend on auth state
+  const navItems: NavItem[] = isAuthenticated
+    ? [
+        {
+          href: "/dashboard",
+          label: "Home",
+          icon: <HomeIcon />,
+          activeIcon: <HomeIconFilled />,
+        },
+        {
+          href: "/editor",
+          label: "Create",
+          icon: <PlusCircleIcon />,
+          activeIcon: <PlusCircleIconFilled />,
+        },
+        {
+          href: "/profile",
+          label: "Profile",
+          icon: <UserIcon />,
+          activeIcon: <UserIconFilled />,
+        },
+      ]
+    : [
+        {
+          href: "/editor",
+          label: "Create",
+          icon: <PlusCircleIcon />,
+          activeIcon: <PlusCircleIconFilled />,
+        },
+        {
+          href: "/login",
+          label: "Sign In",
+          icon: <UserIcon />,
+          activeIcon: <UserIconFilled />,
+        },
+      ];
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white/90 dark:bg-stone-900/90 backdrop-blur-lg border-t border-stone-200 dark:border-stone-800 safe-area-inset-bottom md:hidden">

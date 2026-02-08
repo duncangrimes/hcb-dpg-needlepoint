@@ -3,6 +3,7 @@
 import { Suspense, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { useEditorStore } from "@/stores/editor-store";
+import { useEditorPersistence } from "@/hooks/useEditorPersistence";
 import { UploadStep } from "@/components/editor/UploadStep";
 import { CutoutStep } from "@/components/editor/CutoutStep";
 import { ArrangeStep } from "@/components/editor/ArrangeStep";
@@ -16,15 +17,16 @@ function EditorContent() {
   const setCanvasId = useEditorStore((s) => s.setCanvasId);
   const reset = useEditorStore((s) => s.reset);
 
+  // Persist editor state to localStorage for anonymous users
+  useEditorPersistence();
+
   // Set canvasId from URL params
   useEffect(() => {
     if (canvasId) {
       setCanvasId(canvasId);
-    } else {
-      // New canvas - reset store
-      reset();
     }
-  }, [canvasId, setCanvasId, reset]);
+    // Note: Don't reset on new canvas - let persistence hook restore if available
+  }, [canvasId, setCanvasId]);
 
   return (
     <>

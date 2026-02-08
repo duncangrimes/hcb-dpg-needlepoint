@@ -5,8 +5,10 @@ export default async function Home() {
   const session = await auth();
   
   if (session?.user) {
+    // Logged in users go to their dashboard
     redirect("/dashboard");
   } else {
-    redirect("/login");
+    // Anonymous users go straight to the editor (try before signup)
+    redirect("/editor");
   }
 }
