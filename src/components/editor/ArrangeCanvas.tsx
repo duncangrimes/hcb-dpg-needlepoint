@@ -94,13 +94,16 @@ export function ArrangeCanvas({ className }: ArrangeCanvasProps) {
     });
   }, [dimensions, canvasConfig]);
 
-  // Load image with caching
+  // Load image with caching (supports both blob URLs and data URLs)
   const loadImage = useCallback(async (url: string): Promise<HTMLImageElement> => {
     const cached = imageCache.get(url);
     if (cached) return cached;
     
     const img = new Image();
-    img.crossOrigin = "anonymous";
+    // Only set crossOrigin for external URLs, not data URLs
+    if (!url.startsWith("data:")) {
+      img.crossOrigin = "anonymous";
+    }
     img.src = url;
     await new Promise((resolve, reject) => {
       img.onload = resolve;
@@ -168,9 +171,8 @@ export function ArrangeCanvas({ className }: ArrangeCanvasProps) {
             { padding: 4, featherRadius: 2 }
           );
 
-          // Load as image
+          // Load as image (dataUrl is always a data URL, no crossOrigin needed)
           const img = new Image();
-          img.crossOrigin = "anonymous";
           img.src = dataUrl;
           await new Promise((resolve, reject) => { 
             img.onload = resolve;

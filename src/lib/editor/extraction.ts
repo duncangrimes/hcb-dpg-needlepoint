@@ -111,12 +111,15 @@ export async function extractCutout(
 }
 
 /**
- * Load an image from URL
+ * Load an image from URL (supports both blob URLs and data URLs)
  */
 function loadImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.crossOrigin = "anonymous";
+    // Only set crossOrigin for external URLs, not data URLs
+    if (!url.startsWith("data:")) {
+      img.crossOrigin = "anonymous";
+    }
     img.onload = () => resolve(img);
     img.onerror = reject;
     img.src = url;
