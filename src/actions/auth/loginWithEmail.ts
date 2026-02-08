@@ -11,13 +11,10 @@ export async function loginWithEmail(formData: FormData) {
     throw new Error(result.error.issues[0].message);
   }
 
-  // redirect: false prevents Auth.js from redirecting to verify-request page
-  // We handle the UI feedback in the login form with toast + inline hint
+  // Auth.js pages.verifyRequest is set to '/login?verify=1'
+  // so after sending the email, it redirects back to login with query param
   await signIn("resend", { 
-    email: result.data.email, 
-    redirect: false,
+    email: result.data.email,
     redirectTo: "/dashboard" 
   });
-
-  return { success: true, email: result.data.email };
 }

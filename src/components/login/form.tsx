@@ -2,34 +2,43 @@
 
 import { loginWithEmail } from "@/actions/auth/loginWithEmail";
 import { LoginSchema } from "@/lib/zod-schema";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import toast from "react-hot-toast";
 
 export function LoginForm() {
+  const searchParams = useSearchParams();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [sentEmail, setSentEmail] = useState<string | null>(null);
+  
+  // Check if redirected from Auth.js verify flow (Auth.js adds these params)
+  const isVerifyRedirect = searchParams.get('provider') === 'resend' && searchParams.get('type') === 'email';
+  const showEmailSent = sentEmail || isVerifyRedirect;
+  
+  // Show toast on verify redirect
+  useEffect(() => {
+    if (isVerifyRedirect) {
+      toast.success(
+        <div>
+          <p className="font-medium">Magic link sent!</p>
+          <p className="text-sm opacity-80">Check your email inbox</p>
+        </div>,
+        { duration: 6000, id: 'verify-toast' }
+      );
+    }
+  }, [isVerifyRedirect]);
 
   const handleSubmit = async (formData: FormData) => {
     setIsSubmitting(true);
     setErrorMessage(null);
     
-    const submittedEmail = formData.get("email") as string;
-    
     try {
+      // Auth.js will redirect to /login?verify=1 after sending email
       await loginWithEmail(formData);
-      setSentEmail(submittedEmail);
-      toast.success(
-        <div>
-          <p className="font-medium">Magic link sent!</p>
-          <p className="text-sm opacity-80">Check {submittedEmail}</p>
-        </div>,
-        { duration: 6000 }
-      );
     } catch (err) {
-      toast.error("Failed to send login link. Please try again.");
-    } finally {
       setIsSubmitting(false);
+      toast.error("Failed to send login link. Please try again.");
     }
   };
 
@@ -85,11 +94,13 @@ export function LoginForm() {
             )}
 
             {/* Email sent hint */}
-            {sentEmail && !isSubmitting && (
+            {showEmailSent && !isSubmitting && (
               <div className="bg-sage-50 dark:bg-sage-900/20 border border-sage-200 dark:border-sage-800 rounded-lg p-3 text-sage-700 dark:text-sage-300 text-sm">
                 <p className="font-medium">Check your inbox!</p>
                 <p className="text-sage-600 dark:text-sage-400">
-                  We sent a link to {sentEmail}
+                  {sentEmail 
+                    ? `We sent a link to ${sentEmail}` 
+                    : "We sent you a magic link to sign in"}
                 </p>
               </div>
             )}
@@ -104,7 +115,7 @@ export function LoginForm() {
                   <span className="animate-spin">⏳</span>
                   Sending link...
                 </span>
-              ) : sentEmail ? (
+              ) : showEmailSent ? (
                 "Resend Link"
               ) : (
                 "Continue with Email"

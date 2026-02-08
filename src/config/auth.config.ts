@@ -3,6 +3,7 @@ import type { NextAuthConfig } from 'next-auth';
 export const authConfig = {
   pages: {
     signIn: '/login',
+    verifyRequest: '/login',  // Auth.js adds ?provider=resend&type=email
   },
   callbacks: {
     // authorized({ auth, request: { nextUrl } }) {
