@@ -5,6 +5,7 @@ import { Dialog, DialogPanel, DialogTitle, Transition, TransitionChild } from "@
 import { loginWithEmail } from "@/actions/auth/loginWithEmail";
 import { LoginSchema } from "@/lib/zod-schema";
 import toast from "react-hot-toast";
+import { ArrowPathIcon } from "@heroicons/react/24/outline";
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -97,8 +98,13 @@ export function AuthModal({
             <DialogPanel className="w-full max-w-sm bg-white dark:bg-stone-800 rounded-2xl p-6 shadow-xl">
               {/* Logo */}
               <div className="text-center mb-4">
-                <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-terracotta-500 flex items-center justify-center">
-                  <span className="text-2xl">🧵</span>
+                <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-terracotta-500 flex items-center justify-center shadow-lg shadow-terracotta-500/25">
+                  <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14.5 4.5L5 14l5 5 9.5-9.5" />
+                    <path d="M14.5 4.5l3 3" />
+                    <path d="M5 14l-3 3" />
+                    <path d="M10 19l3 3" />
+                  </svg>
                 </div>
                 <DialogTitle className="text-lg font-semibold text-stone-900 dark:text-white">
                   {title}
@@ -158,7 +164,7 @@ export function AuthModal({
                   >
                     {isSubmitting ? (
                       <span className="flex items-center justify-center gap-2">
-                        <span className="animate-spin">⏳</span>
+                        <ArrowPathIcon className="w-5 h-5 animate-spin" />
                         Sending...
                       </span>
                     ) : (

@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { useEditorStore } from "@/stores/editor-store";
 import { saveSourceImage } from "@/actions/sourceImages";
+import { PhotoIcon, CameraIcon, ArrowPathIcon } from "@heroicons/react/24/outline";
 
 // Max dimension for uploaded images (reduces upload time significantly)
 const MAX_IMAGE_DIMENSION = 2048;
@@ -124,8 +125,16 @@ export function UploadStep() {
       <div className="max-w-md w-full space-y-8 text-center">
         {/* Logo/Title */}
         <div>
+          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-terracotta-500 flex items-center justify-center shadow-lg shadow-terracotta-500/25">
+            <svg className="w-8 h-8 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14.5 4.5L5 14l5 5 9.5-9.5" />
+              <path d="M14.5 4.5l3 3" />
+              <path d="M5 14l-3 3" />
+              <path d="M10 19l3 3" />
+            </svg>
+          </div>
           <h1 className="text-3xl font-bold text-stone-900 dark:text-white">
-            🧵 Needlepoint
+            Needlepoint
           </h1>
           <p className="mt-2 text-stone-600 dark:text-stone-400">
             Turn your photos into custom needlepoint canvases
@@ -140,47 +149,47 @@ export function UploadStep() {
         )}
 
         {/* Upload buttons */}
-        <div className="space-y-4">
-          {/* Camera button - primary */}
+        <div className="space-y-3">
+          {/* Library button - primary */}
           <button
-            onClick={() => cameraInputRef.current?.click()}
+            onClick={() => libraryInputRef.current?.click()}
             disabled={isUploading}
-            className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-terracotta-500 text-white rounded-xl font-medium text-lg hover:bg-terracotta-600 active:scale-[0.98] transition touch-target disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-terracotta-500 text-white rounded-2xl font-semibold text-lg shadow-lg shadow-terracotta-500/25 hover:bg-terracotta-600 hover:shadow-terracotta-500/30 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
           >
             {isUploading ? (
               <>
-                <span className="animate-spin">⏳</span>
+                <ArrowPathIcon className="w-6 h-6 animate-spin" />
                 Uploading...
               </>
             ) : (
               <>
-                <span className="text-2xl">📷</span>
-                Take Photo
+                <PhotoIcon className="w-6 h-6" />
+                Choose from Library
               </>
             )}
+          </button>
+          <input
+            ref={libraryInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
+          />
+
+          {/* Camera button - secondary */}
+          <button
+            onClick={() => cameraInputRef.current?.click()}
+            disabled={isUploading}
+            className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-white dark:bg-stone-800 text-stone-700 dark:text-stone-200 border-2 border-stone-200 dark:border-stone-700 rounded-2xl font-semibold text-lg hover:bg-stone-50 dark:hover:bg-stone-700 hover:border-stone-300 dark:hover:border-stone-600 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <CameraIcon className="w-6 h-6" />
+            Take Photo
           </button>
           <input
             ref={cameraInputRef}
             type="file"
             accept="image/*"
             capture="environment"
-            className="hidden"
-            onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
-          />
-
-          {/* Library button - secondary */}
-          <button
-            onClick={() => libraryInputRef.current?.click()}
-            disabled={isUploading}
-            className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-white dark:bg-stone-800 text-stone-900 dark:text-white border-2 border-stone-200 dark:border-stone-700 rounded-xl font-medium text-lg hover:bg-stone-50 dark:hover:bg-stone-700 active:scale-[0.98] transition touch-target disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <span className="text-2xl">🖼️</span>
-            Choose from Library
-          </button>
-          <input
-            ref={libraryInputRef}
-            type="file"
-            accept="image/*"
             className="hidden"
             onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
           />

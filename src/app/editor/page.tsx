@@ -8,6 +8,7 @@ import { UploadStep } from "@/components/editor/UploadStep";
 import { CutoutStep } from "@/components/editor/CutoutStep";
 import { ArrangeStep } from "@/components/editor/ArrangeStep";
 import { PreviewStep } from "@/components/editor/PreviewStep";
+import { ArrowPathIcon } from "@heroicons/react/24/outline";
 
 function EditorContent() {
   const searchParams = useSearchParams();
@@ -42,7 +43,7 @@ function EditorLoading() {
   return (
     <div className="h-full flex items-center justify-center">
       <div className="text-center">
-        <div className="animate-spin text-4xl mb-2">⏳</div>
+        <ArrowPathIcon className="w-10 h-10 animate-spin text-terracotta-500 mx-auto mb-2" />
         <p className="text-stone-500">Loading editor...</p>
       </div>
     </div>

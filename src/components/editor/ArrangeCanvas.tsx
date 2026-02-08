@@ -6,6 +6,7 @@ import type Konva from "konva";
 import { useEditorStore, usePlacedCutoutsSorted } from "@/stores/editor-store";
 import type { PlacedCutout, Transform } from "@/types/editor";
 import { extractCutout } from "@/lib/editor/extraction";
+import { ArrowPathIcon } from "@heroicons/react/24/outline";
 
 interface ArrangeCanvasProps {
   className?: string;
@@ -348,7 +349,7 @@ export function ArrangeCanvas({ className }: ArrangeCanvasProps) {
       <div ref={containerRef} className={className}>
         <div className="h-full flex items-center justify-center">
           <div className="text-center">
-            <div className="animate-spin text-4xl mb-2">⏳</div>
+            <ArrowPathIcon className="w-10 h-10 animate-spin text-terracotta-500 mx-auto mb-2" />
             <p className="text-stone-500">Loading cutouts...</p>
           </div>
         </div>

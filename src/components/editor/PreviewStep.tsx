@@ -7,6 +7,7 @@ import { generateCanvasAction, type GenerateCanvasResult } from "@/actions/gener
 import { useAuthGate } from "@/hooks/useAuthGate";
 import { AuthModal } from "@/components/auth/AuthModal";
 import { clearEditorSession } from "@/hooks/useEditorPersistence";
+import { ArrowDownTrayIcon, ArrowPathIcon, SparklesIcon } from "@heroicons/react/24/outline";
 import type { Thread } from "@/lib/colors";
 
 export function PreviewStep() {
@@ -180,9 +181,10 @@ export function PreviewStep() {
         {result && (
           <button
             onClick={handleDownload}
-            className="text-terracotta-600 dark:text-terracotta-400 font-medium"
+            className="flex items-center gap-1.5 text-terracotta-600 dark:text-terracotta-400 font-medium"
           >
-            📥 Save
+            <ArrowDownTrayIcon className="w-5 h-5" />
+            Save
           </button>
         )}
         {!result && <div className="w-16" />}
@@ -211,7 +213,7 @@ export function PreviewStep() {
               />
             ) : (
               <div className="text-center p-4">
-                <p className="text-4xl mb-2">🧵</p>
+                <SparklesIcon className="w-12 h-12 mx-auto mb-2 text-terracotta-400" />
                 <p className="text-stone-600 dark:text-stone-400">
                   Ready to generate
                 </p>
@@ -284,30 +286,34 @@ export function PreviewStep() {
           <div className="flex gap-3">
             <button
               onClick={() => setResult(null)}
-              className="flex-1 py-4 bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300 rounded-xl font-semibold text-lg"
+              className="flex-1 py-4 bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300 rounded-2xl font-semibold text-lg hover:bg-stone-200 dark:hover:bg-stone-700 active:scale-[0.98] transition-all"
             >
               Regenerate
             </button>
             <button
               onClick={handleDownload}
-              className="flex-1 py-4 bg-terracotta-500 text-white rounded-xl font-semibold text-lg hover:bg-terracotta-600 active:scale-[0.98] transition"
+              className="flex-1 py-4 bg-terracotta-500 text-white rounded-2xl font-semibold text-lg shadow-lg shadow-terracotta-500/25 hover:bg-terracotta-600 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
             >
-              📥 Download
+              <ArrowDownTrayIcon className="w-5 h-5" />
+              Download
             </button>
           </div>
         ) : (
           <button
             onClick={handleGenerate}
             disabled={isProcessing}
-            className="w-full py-4 bg-terracotta-500 text-white rounded-xl font-semibold text-lg hover:bg-terracotta-600 active:scale-[0.98] transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="w-full py-4 bg-terracotta-500 text-white rounded-2xl font-semibold text-lg shadow-lg shadow-terracotta-500/25 hover:bg-terracotta-600 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none flex items-center justify-center gap-2"
           >
             {isProcessing ? (
               <>
-                <span className="animate-spin">⏳</span>
+                <ArrowPathIcon className="w-5 h-5 animate-spin" />
                 Generating...
               </>
             ) : (
-              "Generate Needlepoint Canvas"
+              <>
+                <SparklesIcon className="w-5 h-5" />
+                Generate Canvas
+              </>
             )}
           </button>
         )}

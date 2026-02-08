@@ -2,6 +2,7 @@
 
 import { useEditorStore } from "@/stores/editor-store";
 import type { BackgroundPattern } from "@/types/editor";
+import { SwatchIcon } from "@heroicons/react/24/outline";
 
 interface SettingsSheetProps {
   isOpen: boolean;
@@ -163,8 +164,8 @@ export function SettingsSheet({ isOpen, onClose }: SettingsSheetProps) {
                   />
                 ))}
                 {/* Custom color input */}
-                <label className="w-10 h-10 rounded-lg border-2 border-dashed border-stone-300 dark:border-stone-600 flex items-center justify-center cursor-pointer hover:border-terracotta-400">
-                  <span className="text-lg">🎨</span>
+                <label className="w-10 h-10 rounded-lg border-2 border-dashed border-stone-300 dark:border-stone-600 flex items-center justify-center cursor-pointer hover:border-terracotta-400 transition">
+                  <SwatchIcon className="w-5 h-5 text-stone-400" />
                   <input
                     type="color"
                     value={canvasConfig.bgColor1}
@@ -194,8 +195,8 @@ export function SettingsSheet({ isOpen, onClose }: SettingsSheetProps) {
                       style={{ backgroundColor: color }}
                     />
                   ))}
-                  <label className="w-10 h-10 rounded-lg border-2 border-dashed border-stone-300 dark:border-stone-600 flex items-center justify-center cursor-pointer">
-                    <span className="text-lg">🎨</span>
+                  <label className="w-10 h-10 rounded-lg border-2 border-dashed border-stone-300 dark:border-stone-600 flex items-center justify-center cursor-pointer hover:border-terracotta-400 transition">
+                    <SwatchIcon className="w-5 h-5 text-stone-400" />
                     <input
                       type="color"
                       value={canvasConfig.bgColor2 || "#E5E7EB"}

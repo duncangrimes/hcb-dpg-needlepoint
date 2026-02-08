@@ -1,5 +1,6 @@
 import { auth, signOut } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import { UserIcon, PaintBrushIcon, QuestionMarkCircleIcon, DocumentTextIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
 
 export default async function ProfilePage() {
   const session = await auth();
@@ -25,7 +26,7 @@ export default async function ProfilePage() {
         <div className="bg-white dark:bg-stone-800 rounded-xl p-6 shadow-sm mb-6">
           <div className="flex items-center gap-4">
             <div className="w-16 h-16 rounded-full bg-terracotta-100 dark:bg-terracotta-900/30 flex items-center justify-center">
-              <span className="text-2xl">👤</span>
+              <UserIcon className="w-8 h-8 text-terracotta-600 dark:text-terracotta-400" />
             </div>
             <div>
               <p className="font-medium text-stone-900 dark:text-white">
@@ -43,24 +44,24 @@ export default async function ProfilePage() {
           <div className="divide-y divide-stone-100 dark:divide-stone-700">
             <button className="w-full px-4 py-4 flex items-center justify-between text-left hover:bg-stone-50 dark:hover:bg-stone-700/50 transition">
               <div className="flex items-center gap-3">
-                <span className="text-xl">🎨</span>
+                <PaintBrushIcon className="w-5 h-5 text-stone-500" />
                 <span className="text-stone-900 dark:text-white">Preferences</span>
               </div>
-              <ChevronRightIcon />
+              <ChevronRightIcon className="w-5 h-5 text-stone-400" />
             </button>
             <button className="w-full px-4 py-4 flex items-center justify-between text-left hover:bg-stone-50 dark:hover:bg-stone-700/50 transition">
               <div className="flex items-center gap-3">
-                <span className="text-xl">❓</span>
+                <QuestionMarkCircleIcon className="w-5 h-5 text-stone-500" />
                 <span className="text-stone-900 dark:text-white">Help & Support</span>
               </div>
-              <ChevronRightIcon />
+              <ChevronRightIcon className="w-5 h-5 text-stone-400" />
             </button>
             <button className="w-full px-4 py-4 flex items-center justify-between text-left hover:bg-stone-50 dark:hover:bg-stone-700/50 transition">
               <div className="flex items-center gap-3">
-                <span className="text-xl">📜</span>
+                <DocumentTextIcon className="w-5 h-5 text-stone-500" />
                 <span className="text-stone-900 dark:text-white">Terms & Privacy</span>
               </div>
-              <ChevronRightIcon />
+              <ChevronRightIcon className="w-5 h-5 text-stone-400" />
             </button>
           </div>
         </div>
@@ -86,13 +87,5 @@ export default async function ProfilePage() {
         </p>
       </main>
     </div>
-  );
-}
-
-function ChevronRightIcon() {
-  return (
-    <svg className="w-5 h-5 text-stone-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-    </svg>
   );
 }

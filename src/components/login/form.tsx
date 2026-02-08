@@ -5,6 +5,7 @@ import { LoginSchema } from "@/lib/zod-schema";
 import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import toast from "react-hot-toast";
+import { ArrowPathIcon } from "@heroicons/react/24/outline";
 
 export function LoginForm() {
   const searchParams = useSearchParams();
@@ -47,8 +48,13 @@ export function LoginForm() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-terracotta-500 flex items-center justify-center">
-            <span className="text-3xl">🧵</span>
+          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-terracotta-500 flex items-center justify-center shadow-lg shadow-terracotta-500/25">
+            <svg className="w-8 h-8 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14.5 4.5L5 14l5 5 9.5-9.5" />
+              <path d="M14.5 4.5l3 3" />
+              <path d="M5 14l-3 3" />
+              <path d="M10 19l3 3" />
+            </svg>
           </div>
           <h1 className="text-2xl font-semibold text-stone-900 dark:text-white">
             Welcome to Needlepoint
@@ -112,7 +118,7 @@ export function LoginForm() {
             >
               {isSubmitting ? (
                 <span className="flex items-center justify-center gap-2">
-                  <span className="animate-spin">⏳</span>
+                  <ArrowPathIcon className="w-5 h-5 animate-spin" />
                   Sending link...
                 </span>
               ) : showEmailSent ? (
