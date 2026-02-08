@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useSession } from "next-auth/react";
 import { useEditorStore } from "@/stores/editor-store";
 import { saveSourceImage } from "@/actions/sourceImages";
 import { PhotoIcon, CameraIcon, ArrowPathIcon } from "@heroicons/react/24/outline";
@@ -78,6 +79,7 @@ async function resizeImage(
 }
 
 export function UploadStep() {
+  const { data: session } = useSession();
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const libraryInputRef = useRef<HTMLInputElement>(null);
   const addSourceImage = useEditorStore((s) => s.addSourceImage);
@@ -94,24 +96,34 @@ export function UploadStep() {
       // Resize image if needed (reduces upload time significantly)
       const { dataUrl, width, height } = await resizeImage(file, MAX_IMAGE_DIMENSION);
 
-      // Save to database
-      const result = await saveSourceImage({
-        dataUrl,
-        width,
-        height,
-      });
+      if (session) {
+        // Authenticated: save to database and blob storage
+        const result = await saveSourceImage({
+          dataUrl,
+          width,
+          height,
+        });
 
-      if (!result.success || !result.sourceImage) {
-        throw new Error(result.error || "Failed to save image");
+        if (!result.success || !result.sourceImage) {
+          throw new Error(result.error || "Failed to save image");
+        }
+
+        // Add to store with the real DB id and blob storage URL
+        addSourceImage({
+          id: result.sourceImage.id,
+          url: result.sourceImage.url,
+          width: result.sourceImage.width,
+          height: result.sourceImage.height,
+        });
+      } else {
+        // Unauthenticated: store data URL client-side only
+        addSourceImage({
+          id: crypto.randomUUID(),
+          url: dataUrl,
+          width,
+          height,
+        });
       }
-
-      // Add to store with the real DB id and blob storage URL
-      addSourceImage({
-        id: result.sourceImage.id,
-        url: result.sourceImage.url,
-        width: result.sourceImage.width,
-        height: result.sourceImage.height,
-      });
     } catch (err) {
       console.error("Upload failed:", err);
       setError(err instanceof Error ? err.message : "Upload failed");

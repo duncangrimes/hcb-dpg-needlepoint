@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { useSession } from "next-auth/react";
 
-export type PostAuthAction = "download" | "save" | "share";
+export type PostAuthAction = "download" | "save" | "share" | "generate";
 
 interface UseAuthGateReturn {
   /** Whether the user is authenticated */
