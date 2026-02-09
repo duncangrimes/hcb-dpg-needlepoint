@@ -8,13 +8,12 @@ import { generateCanvasAction, type GenerateCanvasResult } from "@/actions/gener
 import { useAuthGate } from "@/hooks/useAuthGate";
 import { AuthModal } from "@/components/auth/AuthModal";
 import { clearEditorSession } from "@/hooks/useEditorPersistence";
-import { ArrowDownTrayIcon, ArrowPathIcon, SparklesIcon, LockClosedIcon } from "@heroicons/react/24/outline";
+import { ArrowDownTrayIcon, ArrowPathIcon, SparklesIcon } from "@heroicons/react/24/outline";
 import type { Thread } from "@/lib/colors";
 
 export function PreviewStep() {
   const router = useRouter();
-  const { data: session, status } = useSession();
-  const isAuthLoading = status === "loading";
+  useSession(); // Keep session provider active for auth modal
   const setStep = useEditorStore((s) => s.setStep);
   const isProcessing = useEditorStore((s) => s.isProcessing);
   const setProcessing = useEditorStore((s) => s.setProcessing);
@@ -95,13 +94,8 @@ export function PreviewStep() {
   // Users now explicitly click "Generate Canvas" button
   // This saves ~3-5 seconds on navigation to preview step
 
-  // Gated generate handler (requires auth)
-  const handleGenerateWithAuth = useCallback(() => {
-    if (!requireAuth("generate")) {
-      return; // Modal will show
-    }
-    handleGenerate();
-  }, [requireAuth, handleGenerate]);
+  // Generate is NOT gated - anyone can preview their canvas
+  // Only download requires authentication
 
   // Actual download logic
   const performDownload = useCallback(() => {
@@ -131,15 +125,14 @@ export function PreviewStep() {
     performDownload();
   }, [result, requireAuth, performDownload]);
 
-  // Execute pending action after authentication
+  // Execute pending action after authentication (only download is gated)
   useEffect(() => {
-    if (isAuthenticated && pendingAction) {
+    if (isAuthenticated && pendingAction === "download") {
       executePendingAction({
         download: performDownload,
-        generate: handleGenerate,
       });
     }
-  }, [isAuthenticated, pendingAction, executePendingAction, performDownload, handleGenerate]);
+  }, [isAuthenticated, pendingAction, executePendingAction, performDownload]);
 
   // Render stitchability score bar
   const renderStitchabilityBar = (score: number) => {
@@ -165,13 +158,13 @@ export function PreviewStep() {
 
   return (
     <div className="h-full flex flex-col">
-      {/* Auth Modal */}
+      {/* Auth Modal - only shows for download */}
       <AuthModal
         isOpen={showAuthModal}
         onClose={closeAuthModal}
-        title={pendingAction === "generate" ? "Sign in to generate" : "Sign in to download"}
-        description="Create a free account to generate your canvas, download it, and save your work."
-        postAuthAction={pendingAction ?? undefined}
+        title="Sign in to download"
+        description="Create a free account to download your canvas and save your work."
+        postAuthAction="download"
       />
 
       {/* Header */}
@@ -218,16 +211,6 @@ export function PreviewStep() {
                 className="w-full h-full object-contain"
                 style={{ imageRendering: "pixelated" }}
               />
-            ) : !session && !isAuthLoading ? (
-              <div className="text-center p-4">
-                <LockClosedIcon className="w-12 h-12 mx-auto mb-2 text-stone-400" />
-                <p className="text-stone-600 dark:text-stone-400 font-medium">
-                  Sign in to generate your canvas
-                </p>
-                <p className="text-sm text-stone-500 dark:text-stone-500 mt-1">
-                  Create a free account to continue
-                </p>
-              </div>
             ) : (
               <div className="text-center p-4">
                 <SparklesIcon className="w-12 h-12 mx-auto mb-2 text-terracotta-400" />
@@ -317,8 +300,8 @@ export function PreviewStep() {
           </div>
         ) : (
           <button
-            onClick={handleGenerateWithAuth}
-            disabled={isProcessing || isAuthLoading}
+            onClick={handleGenerate}
+            disabled={isProcessing}
             className="w-full py-4 bg-terracotta-500 text-white rounded-2xl font-semibold text-lg shadow-lg shadow-terracotta-500/25 hover:bg-terracotta-600 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none flex items-center justify-center gap-2"
           >
             {isProcessing ? (
