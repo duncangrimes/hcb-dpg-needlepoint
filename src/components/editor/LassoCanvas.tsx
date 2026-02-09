@@ -205,10 +205,11 @@ export function LassoCanvas({ className, onCutoutComplete }: LassoCanvasProps) {
         const doExtraction = async () => {
           try {
             // Dynamically import extraction to avoid SSR issues
-            const { extractCutout, createCutoutThumbnail } = await import("@/lib/editor/extraction");
+            const { extractCutoutWithWorker } = await import("@/lib/editor/extraction-worker");
+            const { createCutoutThumbnail } = await import("@/lib/editor/extraction");
             
-            // Extract the cutout image
-            const { dataUrl } = await extractCutout(
+            // Extract the cutout image (uses Web Worker if available)
+            const { dataUrl } = await extractCutoutWithWorker(
               activeSource.url,
               pathToSave,
               { padding: 4, featherRadius: 2 }

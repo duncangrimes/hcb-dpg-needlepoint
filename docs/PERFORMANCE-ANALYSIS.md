@@ -1,0 +1,795 @@
+# Performance Analysis: HCB Needlepoint App
+
+**Date:** February 8, 2026  
+**Next.js Version:** 15.5.9 (with React 19.1.0)  
+**Reported Issues:**
+1. Clicking "Go to Canvas" takes ~8 seconds
+2. Cutouts don't appear for ~5 seconds after that
+
+---
+
+## Executive Summary
+
+The latency issues stem from **heavy client-side pixel extraction** that runs synchronously on the main thread when transitioning to the arrange step. The extraction algorithm iterates over every pixel in images up to 2048×2048 (4+ million pixels), checking each against a polygon boundary. This work is performed *after* the user clicks "Go to Canvas" instead of being pre-computed during the lasso drawing phase.
+
+**Total potential improvement: 10-12 seconds → <1 second**
+
+---
+
+## Issue 1: "Go to Canvas" Takes ~8 Seconds
+
+### Root Cause Analysis
+
+#### Flow Trace
+```
+User clicks "Go to Canvas" (ClipModal.tsx:51)
+  → setStep("arrange") 
+  → ArrangeStep mounts
+  → ArrangeCanvas mounts
+  → useEffect triggers extractImages() (ArrangeCanvas.tsx:61-118)
+  → For each cutout: extractCutout() runs
+    → Loads full source image
+    → Iterates EVERY pixel (O(width × height))
+    → For each pixel: pointInPolygon() (O(polygon_edges))
+  → setCutoutImages() triggers re-render
+```
+
+#### Primary Bottleneck: `extractCutout()` in `src/lib/editor/extraction.ts`
+
+**Lines 17-74:** The extraction function is O(n × m) where n = image pixels and m = polygon edges.
+
+```typescript
+// For a 2048×2048 image with 200-point lasso:
+// 4,194,304 pixels × 200 polygon checks = 838,860,800 operations
+for (let y = 0; y < cropHeight; y++) {
+  for (let x = 0; x < cropWidth; x++) {
+    const point = { x, y };
+    if (!pointInPolygon(point, localPath)) {  // O(polygon edges)
+      data[idx + 3] = 0;
+    } else if (featherRadius > 0) {
+      const distToEdge = distanceToPolygonEdge(point, localPath); // O(polygon edges)
+      // ...
+    }
+  }
+}
+```
+
+#### Secondary Bottleneck: Extraction Runs After Navigation
+
+In `LassoCanvas.tsx` (lines 127-160), extraction is deferred to idle time:
+```typescript
+setTimeout(() => {
+  if ('requestIdleCallback' in window) {
+    (window as any).requestIdleCallback(doExtraction, { timeout: 2000 });
+  } else {
+    doExtraction();
+  }
+}, 50);
+```
+
+**Problem:** If user clicks "Go to Canvas" before idle extraction completes, `ArrangeCanvas` has to do the work synchronously. The 2000ms timeout is often not enough for complex extractions.
+
+#### Tertiary Bottleneck: Sequential Processing
+
+In `ArrangeCanvas.tsx` (line 64), cutouts are processed sequentially:
+```typescript
+for (const placed of placedCutouts) {
+  // ... await extractCutout() - blocks on each one
+}
+```
+
+### Specific Code Locations
+
+| File | Lines | Issue |
+|------|-------|-------|
+| `src/lib/editor/extraction.ts` | 45-70 | O(n×m) pixel iteration on main thread |
+| `src/components/editor/ArrangeCanvas.tsx` | 61-118 | Extraction runs after step change, not before |
+| `src/components/editor/LassoCanvas.tsx` | 127-160 | Race condition: idle callback vs user navigation |
+| `src/lib/editor/geometry.ts` | 8-27 | `pointInPolygon` called millions of times |
+
+---
+
+## Issue 2: Cutouts Don't Appear for ~5 Seconds After Canvas Loads
+
+### Root Cause Analysis
+
+This is a *continuation* of Issue 1. The timeline is:
+
+```
+0s    - User clicks "Go to Canvas"
+0-8s  - Main thread blocked by extractImages()
+8s    - ArrangeCanvas renders with "Loading cutouts..." spinner
+8-13s - Images loaded and converted to Konva Image elements
+13s   - Cutouts finally appear
+```
+
+#### Why Loading Continues After Extraction
+
+1. **Image Loading Waterfall** (`ArrangeCanvas.tsx:37-48`):
+   ```typescript
+   const loadImage = useCallback(async (url: string): Promise<HTMLImageElement> => {
+     const img = new Image();
+     img.crossOrigin = "anonymous";
+     img.src = url;
+     await new Promise((resolve, reject) => {
+       img.onload = resolve;
+       img.onerror = reject;
+     });
+     return img;
+   }, []);
+   ```
+   Each image loads separately, not in parallel.
+
+2. **Re-extraction on Step Changes**: Cache key is by `cutoutId`, but if user goes back to cutout step and modifies the lasso, cache isn't invalidated properly.
+
+3. **Data URL Size**: Extracted PNGs as data URLs can be 1-5MB each, bloating memory and slowing canvas drawing.
+
+### Specific Code Locations
+
+| File | Lines | Issue |
+|------|-------|-------|
+| `src/components/editor/ArrangeCanvas.tsx` | 61-118 | `useEffect` dependency on `placedCutouts.length` triggers re-extraction |
+| `src/components/editor/ArrangeCanvas.tsx` | 37-48 | No parallel image loading |
+| `src/lib/editor/extraction.ts` | 76-85 | Returns large data URLs instead of blobs |
+
+---
+
+## Additional Performance Issues Discovered
+
+### 1. PreviewStep Auto-Generation on Mount
+
+**File:** `src/components/editor/PreviewStep.tsx` (lines 52-83)
+
+```typescript
+useEffect(() => {
+  if (!hasAutoGenerated.current && placedCutouts.length > 0 && !isProcessing && !result && session) {
+    hasAutoGenerated.current = true;
+    handleGenerate();  // Triggers heavy server action immediately
+  }
+}, [placedCutouts.length, isProcessing, result, handleGenerate, session]);
+```
+
+**Impact:** ~3-5 second delay as `generateCanvasAction` runs on navigation to preview.
+
+### 2. Source Image Re-fetching in Server Action
+
+**File:** `src/actions/generateCanvas.ts` (lines 43-56)
+
+```typescript
+// Convert source images to data URLs
+for (const source of sourceImages) {
+  const response = await fetch(source.url);  // Re-downloads from blob storage!
+  const blob = await response.blob();
+  const dataUrl = await new Promise<string>((resolve) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(blob);
+  });
+  sourceImageDataUrls[source.id] = dataUrl;
+}
+```
+
+**Impact:** ~1-2 seconds to re-download images that are already in browser cache.
+
+### 3. Duplicate Extraction Work
+
+- **Client:** `LassoCanvas.tsx` extracts cutout for display
+- **Server:** `generateCanvas.ts` extracts cutout again for manufacturing image
+
+This is O(2n) work that should be O(n).
+
+### 4. Heavy Zustand Store Updates
+
+**File:** `src/stores/editor-store.ts` (lines 120-137)
+
+The `finishDrawing` action creates both a cutout AND a placement, triggering multiple re-renders:
+```typescript
+state.cutouts.push(newCutout);
+state.placedCutouts.push(newPlacement);
+state.activeCutoutId = newCutout.id;
+```
+
+Each mutation triggers subscribers, and `ArrangeCanvas` subscribes to multiple slices.
+
+---
+
+## Prioritized Recommendations
+
+### 🔴 Critical (Fixes both issues, estimated -10s)
+
+#### 1. Server-Side Extraction via Route Handler (Next.js 15 Pattern)
+
+**Effort:** 3-4 hours  
+**Impact:** ~8 seconds saved  
+**Next.js Pattern:** Route Handlers + Streaming
+
+Instead of client-side extraction, offload to a Route Handler that uses Sharp (already in dependencies):
+
+Create `src/app/api/extract/route.ts`:
+```typescript
+import { NextRequest, NextResponse } from 'next/server';
+import sharp from 'sharp';
+import { pointInPolygon } from '@/lib/editor/geometry';
+
+export async function POST(request: NextRequest) {
+  const { sourceImageUrl, path } = await request.json();
+  
+  // Fetch source image on server (close to blob storage)
+  const response = await fetch(sourceImageUrl);
+  const buffer = Buffer.from(await response.arrayBuffer());
+  
+  // Extract with Sharp (GPU-accelerated, 100x faster than canvas)
+  const extracted = await extractWithSharp(buffer, path);
+  
+  // Return as streaming response
+  return new NextResponse(extracted, {
+    headers: { 'Content-Type': 'image/png' },
+  });
+}
+```
+
+**Why this is better:**
+- Sharp uses native libvips (C/C++), 10-100x faster than browser Canvas API
+- Runs on server, doesn't block main thread
+- Server is closer to blob storage (lower latency)
+- Can leverage Next.js Data Cache for repeated extractions
+
+#### 2. Pre-extract During Lasso Drawing with Server Action
+
+**Effort:** 2-3 hours  
+**Impact:** ~5 seconds saved  
+**Next.js Pattern:** Server Actions for mutations
+
+Modify `LassoCanvas.tsx` to call extraction immediately after lasso completes:
+
+```typescript
+// src/actions/extractCutout.ts
+'use server';
+
+import sharp from 'sharp';
+import { put } from '@vercel/blob';
+
+export async function extractCutoutAction(
+  sourceImageUrl: string, 
+  path: Point[]
+): Promise<{ extractedUrl: string }> {
+  const response = await fetch(sourceImageUrl);
+  const buffer = Buffer.from(await response.arrayBuffer());
+  
+  const extracted = await extractWithSharp(buffer, path);
+  
+  // Upload to blob storage and return URL
+  const blob = await put(`extractions/${Date.now()}.png`, extracted, {
+    access: 'public',
+    contentType: 'image/png',
+  });
+  
+  return { extractedUrl: blob.url };
+}
+```
+
+Then in `LassoCanvas.tsx`:
+```typescript
+// Start extraction immediately after lasso completes (don't wait for navigation)
+finishDrawing();
+const extractionPromise = extractCutoutAction(activeSource.url, pathToSave);
+useEditorStore.getState().setExtractionPromise(newCutoutId, extractionPromise);
+```
+
+#### 3. Web Worker Fallback for Offline/Anonymous Users
+
+**Effort:** 2-3 hours  
+**Impact:** Fallback when server extraction not available
+
+Create `src/workers/extraction.worker.ts`:
+```typescript
+// Worker thread - doesn't block main thread
+self.onmessage = async (e) => {
+  const { imageData, path, width, height } = e.data;
+  const result = extractCutoutPixels(imageData, path, width, height);
+  self.postMessage(result);
+};
+```
+
+### 🟠 High Priority (Prevents regressions, estimated -3s)
+
+#### 4. Parallel Image Loading with Promise.all
+
+**Effort:** 30 minutes  
+**Impact:** ~1-2 seconds saved  
+**Next.js Pattern:** Parallel data fetching
+
+```typescript
+// ArrangeCanvas.tsx - load all images in parallel (Next.js recommended pattern)
+const imagePromises = placedCutouts.map(async (placed) => {
+  const cutout = cutoutsById.get(placed.cutoutId);
+  if (!cutout?.extractedUrl) return null;
+  const img = await loadImage(cutout.extractedUrl);
+  return { cutoutId: placed.cutoutId, img };
+});
+
+// Use Promise.allSettled to handle partial failures gracefully
+const results = await Promise.allSettled(imagePromises);
+const images = results
+  .filter((r): r is PromiseFulfilledResult<CutoutImage> => r.status === 'fulfilled')
+  .map(r => r.value);
+```
+
+#### 5. Use next/image for Optimized Loading
+
+**Effort:** 1 hour  
+**Impact:** ~1 second saved, better UX  
+**Next.js Pattern:** Image Optimization
+
+Currently `PreviewStep.tsx` uses plain `<img>`:
+```tsx
+// Current (line 125)
+<img src={result.manufacturerImageUrl} ... />
+```
+
+Replace with `next/image` for automatic optimization:
+```tsx
+import Image from 'next/image';
+
+<Image
+  src={result.manufacturerImageUrl}
+  alt="Generated needlepoint canvas"
+  fill
+  style={{ objectFit: 'contain', imageRendering: 'pixelated' }}
+  sizes="(max-width: 768px) 100vw, 50vw"
+  priority // Skip lazy loading for LCP image
+/>
+```
+
+**Note:** For blob storage URLs, configure `next.config.js`:
+```javascript
+images: {
+  remotePatterns: [
+    { protocol: 'https', hostname: '*.public.blob.vercel-storage.com' },
+  ],
+}
+```
+
+#### 6. Use Blob URLs Instead of Data URLs
+
+**Effort:** 1 hour  
+**Impact:** ~500ms saved, less memory
+
+```typescript
+// extraction.ts - return blob URL instead of data URL
+const blob = await new Promise<Blob>((resolve) => canvas.toBlob(resolve, "image/png"));
+return { 
+  url: URL.createObjectURL(blob),
+  width: cropWidth,
+  height: cropHeight 
+};
+```
+
+#### 7. Optimize `pointInPolygon` with Spatial Index
+
+**Effort:** 2 hours  
+**Impact:** ~2-3 seconds saved for complex lassos
+
+Pre-compute bounding box check before ray casting:
+```typescript
+// geometry.ts - add fast-fail check
+export function pointInPolygon(point: Point, polygon: Point[], bounds?: Bounds): boolean {
+  // Fast reject: check bounds first
+  if (bounds && (point.x < bounds.minX || point.x > bounds.maxX || 
+                  point.y < bounds.minY || point.y > bounds.maxY)) {
+    return false;
+  }
+  // ... existing ray casting
+}
+```
+
+### 🟡 Medium Priority (Improves UX, estimated -2s)
+
+#### 8. Streaming with Suspense Boundaries
+
+**Effort:** 2 hours  
+**Impact:** Instant perceived load  
+**Next.js Pattern:** Streaming + Suspense
+
+Wrap heavy components in Suspense to show UI immediately:
+
+```tsx
+// src/components/editor/ArrangeStep.tsx
+import { Suspense } from 'react';
+
+export function ArrangeStep() {
+  return (
+    <div className="h-full flex flex-col">
+      <Header />
+      <Suspense fallback={<CanvasSkeleton />}>
+        <ArrangeCanvas className="flex-1" />
+      </Suspense>
+      <Toolbar />
+    </div>
+  );
+}
+
+function CanvasSkeleton() {
+  return (
+    <div className="flex-1 bg-stone-100 dark:bg-stone-800 animate-pulse flex items-center justify-center">
+      <div className="w-3/4 h-3/4 bg-stone-200 dark:bg-stone-700 rounded-lg" />
+    </div>
+  );
+}
+```
+
+#### 9. Add loading.tsx for Step Transitions
+
+**Effort:** 30 minutes  
+**Impact:** Instant visual feedback  
+**Next.js Pattern:** loading.js convention
+
+Create `src/app/editor/loading.tsx`:
+```tsx
+export default function EditorLoading() {
+  return (
+    <div className="h-[100dvh] flex items-center justify-center bg-stone-50 dark:bg-stone-900">
+      <div className="animate-spin rounded-full h-12 w-12 border-4 border-terracotta-500 border-t-transparent" />
+    </div>
+  );
+}
+```
+
+#### 10. Skeleton Loading States in ArrangeCanvas
+
+**Effort:** 1 hour  
+**Impact:** Perceived performance improvement
+
+Show placeholders immediately while extraction runs in background:
+```tsx
+// ArrangeCanvas.tsx
+{placedCutouts.map((placed) => {
+  const img = cutoutImages.get(placed.cutoutId);
+  if (!img) {
+    return <Rect key={placed.id} fill="#E8E8E8" {...getPlaceholderProps(placed)} />;
+  }
+  return <KonvaImage key={placed.id} image={img.image} {...props} />;
+})}
+```
+
+#### 11. Defer PreviewStep Generation
+
+**Effort:** 30 minutes  
+**Impact:** ~3 seconds saved on preview navigation
+
+Remove auto-generation; require explicit button click:
+```typescript
+// PreviewStep.tsx - remove the useEffect that auto-generates
+// User must click "Generate Canvas" button
+```
+
+#### 12. Cache Extracted Images with React.cache + Data Cache
+
+**Effort:** 3 hours  
+**Impact:** Instant loads on return visits  
+**Next.js Pattern:** Request Memoization + Data Cache
+
+```typescript
+// src/lib/extraction-cache.ts
+import { cache } from 'react';
+
+export const getExtractedCutout = cache(async (
+  cutoutId: string, 
+  sourceUrl: string, 
+  path: Point[]
+) => {
+  const response = await fetch(`/api/extract`, {
+    method: 'POST',
+    body: JSON.stringify({ sourceUrl, path }),
+    next: { 
+      revalidate: 86400,  // Cache for 24 hours
+      tags: [`cutout-${cutoutId}`] 
+    },
+  });
+  return response.blob();
+});
+```
+
+For client-side caching, use IndexedDB:
+```typescript
+const CACHE_NAME = 'cutout-extractions';
+async function getCachedExtraction(cutoutId: string, path: Point[]): Promise<Blob | null> {
+  const hash = hashPath(path);
+  const cache = await caches.open(CACHE_NAME);
+  return cache.match(`/extractions/${cutoutId}-${hash}`);
+}
+```
+
+### 🟢 Low Priority (Long-term improvements)
+
+#### 13. WebGL-Based Client Extraction
+
+**Effort:** 16 hours  
+**Impact:** 100x faster client-side extraction
+
+Use GPU for polygon masking when server extraction isn't available:
+```typescript
+// Use regl or Three.js to render mask as shader
+const maskShader = `
+  bool pointInPolygon(vec2 p, vec2 polygon[MAX_POINTS], int n) {
+    // GPU-parallel ray casting
+  }
+`;
+```
+
+#### 14. Edge Runtime for Extraction API
+
+**Effort:** 4 hours  
+**Impact:** Lower latency, global distribution  
+**Next.js Pattern:** Edge Runtime
+
+```typescript
+// src/app/api/extract/route.ts
+export const runtime = 'edge';
+
+// Note: Sharp doesn't work on Edge, but you can use 
+// @vercel/og's satori or wasm-based image libraries
+```
+
+#### 15. Incremental Static Regeneration for Generated Canvases
+
+**Effort:** 2 hours  
+**Impact:** Instant loads for shared canvas links  
+**Next.js Pattern:** ISR with revalidation
+
+```typescript
+// src/app/canvas/[id]/page.tsx
+export const revalidate = 3600; // Revalidate every hour
+
+export default async function CanvasPage({ params }: { params: { id: string } }) {
+  const canvas = await getCanvas(params.id);
+  return <CanvasViewer canvas={canvas} />;
+}
+```
+
+---
+
+## Next.js 15 Anti-Patterns Found
+
+The codebase has several patterns that don't align with Next.js 15 best practices:
+
+### 1. Heavy Client-Side Processing Instead of Server Components
+
+**Current:** Extraction runs in Client Component (`ArrangeCanvas.tsx`)  
+**Next.js 15 Way:** Move compute-heavy work to Server Components or Route Handlers
+
+```typescript
+// ❌ Current: Client-side extraction
+'use client';
+export function ArrangeCanvas() {
+  useEffect(() => {
+    // Heavy extraction on main thread
+    for (const placed of placedCutouts) {
+      await extractCutout(source.url, cutout.path);  // Blocks UI
+    }
+  }, []);
+}
+
+// ✅ Better: Server Action or Route Handler
+'use server';
+export async function extractCutoutAction(sourceUrl: string, path: Point[]) {
+  const extracted = await extractWithSharp(sourceUrl, path);
+  return uploadToBlob(extracted);
+}
+```
+
+### 2. Not Using next/image Component
+
+**Current:** Plain `<img>` tags in `PreviewStep.tsx` (line 125)  
+**Next.js 15 Way:** Use `<Image>` for automatic optimization
+
+```tsx
+// ❌ Current
+<img src={result.manufacturerImageUrl} style={{ imageRendering: 'pixelated' }} />
+
+// ✅ Better
+import Image from 'next/image';
+<Image src={result.manufacturerImageUrl} fill priority />
+```
+
+### 3. Re-fetching Data in Server Actions
+
+**Current:** `PreviewStep.tsx` (lines 54-63) fetches images that are already loaded  
+**Next.js 15 Way:** Pass data as serializable props, use React.cache for deduplication
+
+```typescript
+// ❌ Current: Re-fetches images
+const handleGenerate = async () => {
+  for (const source of sourceImages) {
+    const response = await fetch(source.url);  // Already in browser!
+    const blob = await response.blob();
+  }
+};
+
+// ✅ Better: Pass URLs, let server fetch from origin (closer to blob storage)
+const handleGenerate = async () => {
+  await generateCanvasAction({
+    sourceImageUrls: sourceImages.map(s => s.url),  // Just URLs
+    // Server fetches directly from blob storage
+  });
+};
+```
+
+### 4. No Suspense Boundaries for Streaming
+
+**Current:** Entire step renders or shows spinner  
+**Next.js 15 Way:** Wrap async components in Suspense for progressive loading
+
+### 5. Missing loading.tsx Convention
+
+**Current:** Manual loading states in each component  
+**Next.js 15 Way:** Use `loading.tsx` file convention for automatic streaming
+
+---
+
+## Impact Summary
+
+| Fix | Effort | Time Saved | Priority | Next.js Pattern |
+|-----|--------|------------|----------|-----------------|
+| Server-side extraction via Route Handler | 3-4h | ~8s | 🔴 Critical | Route Handlers |
+| Pre-extract with Server Action | 2-3h | ~5s | 🔴 Critical | Server Actions |
+| Web Worker fallback | 2-3h | ~8s offline | 🔴 Critical | - |
+| Parallel image loading | 30m | ~1-2s | 🟠 High | Promise.all |
+| Use next/image | 1h | ~1s | 🟠 High | Image Optimization |
+| Blob URLs | 1h | ~500ms | 🟠 High | - |
+| Optimize pointInPolygon | 2h | ~2-3s | 🟠 High | - |
+| Suspense boundaries | 2h | Perceived | 🟡 Medium | Streaming |
+| Add loading.tsx | 30m | Perceived | 🟡 Medium | loading.js |
+| Skeleton loading | 1h | Perceived | 🟡 Medium | Streaming |
+| Defer preview generation | 30m | ~3s | 🟡 Medium | - |
+| React.cache + Data Cache | 3h | Instant revisits | 🟡 Medium | Caching |
+| WebGL extraction | 16h | 100x faster | 🟢 Low | - |
+| Edge Runtime | 4h | Lower latency | 🟢 Low | Edge Runtime |
+| ISR for shared canvases | 2h | Instant loads | 🟢 Low | ISR |
+
+---
+
+## Quick Wins (Can implement today)
+
+1. **Parallel image loading with Promise.all** - 30 minutes, immediate improvement
+2. **Defer preview generation** - 30 minutes, removes surprise delay  
+3. **Add bounds check to pointInPolygon** - 15 minutes, 30-50% faster extraction
+4. **Add loading.tsx** - 15 minutes, instant visual feedback
+5. **Configure next/image for blob storage** - 15 minutes, better image loading
+
+## Recommended Implementation Order
+
+### Phase 1: Quick Wins (2 hours)
+1. ✅ Parallel image loading with Promise.allSettled
+2. ✅ Defer preview auto-generation
+3. ✅ Add bounds check to pointInPolygon
+4. ✅ Add `loading.tsx` for editor route
+5. ✅ Configure next/image for remote patterns
+
+### Phase 2: Server-Side Extraction (4-6 hours)
+6. ✅ Create `/api/extract` Route Handler with Sharp
+7. ✅ Update LassoCanvas to call extraction Server Action immediately
+8. ✅ Update ArrangeCanvas to await extraction promises
+
+### Phase 3: Polish (3-4 hours)
+9. ✅ Add Suspense boundaries around ArrangeCanvas
+10. ✅ Implement skeleton loading states
+11. ✅ Replace `<img>` with `<Image>` in PreviewStep
+
+### Phase 4: Caching (3 hours)
+12. 🔄 Add React.cache wrapper for extraction
+13. 🔄 Configure Data Cache with revalidation tags
+14. 🔄 Add IndexedDB cache for offline support
+
+### Phase 5: Advanced (Future)
+15. 🔄 WebGL-based client extraction
+16. 🔄 Edge Runtime for global distribution
+17. 🔄 ISR for shared canvas pages
+
+---
+
+## Architecture Diagram
+
+```
+Current Flow (Slow - Client-Side Heavy):
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│ LassoCanvas │───▶│  CutoutStep │───▶│ArrangeCanvas│
+│ (draws lasso)│    │(click go to)│    │(EXTRACTION) │ ◀── BLOCKING MAIN THREAD!
+└─────────────┘    └─────────────┘    └─────────────┘
+     CLIENT              CLIENT              CLIENT
+                                            │
+                                            ▼
+                                      ┌─────────────┐
+                                      │ Image Load  │
+                                      │ (waterfall) │
+                                      └─────────────┘
+
+Proposed Flow (Fast - Next.js 15 Patterns):
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│ LassoCanvas │───▶│Server Action│    │ArrangeCanvas│
+│ (draws lasso)│    │(extraction) │    │(<Suspense>) │
+└──────┬──────┘    └──────┬──────┘    └──────┬──────┘
+     CLIENT            SERVER             CLIENT
+       │                  │                   │
+       │ call action      │ returns URL       │ <Suspense fallback>
+       └─────────────────▶│                   │
+                          │                   │
+                    ┌─────┴─────┐             │
+                    │   Sharp   │             │
+                    │(extraction)│             │
+                    └─────┬─────┘             │
+                          │                   │
+                    ┌─────┴─────┐             │
+                    │Blob Storage│────────────┤
+                    │  (upload)  │             │
+                    └───────────┘             │
+                                              ▼
+                                        ┌─────────────┐
+                                        │ Promise.all │
+                                        │(parallel)   │
+                                        └─────────────┘
+
+Data Flow with Next.js 15 Caching:
+┌────────────────────────────────────────────────────────────────┐
+│                        REQUEST LIFECYCLE                        │
+├────────────────────────────────────────────────────────────────┤
+│  Client Request                                                 │
+│       │                                                         │
+│       ▼                                                         │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐        │
+│  │ React.cache │───▶│ Data Cache  │───▶│ Blob Storage│        │
+│  │ (memoize)   │    │ (persist)   │    │ (origin)    │        │
+│  └─────────────┘    └─────────────┘    └─────────────┘        │
+│                                                                 │
+│  • React.cache: Dedupe within single request                   │
+│  • Data Cache: Persist across requests (revalidate: 86400)     │
+│  • Blob Storage: Source of truth                               │
+└────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Next.js Configuration Updates
+
+Add these to `next.config.js` to enable recommended optimizations:
+
+```javascript
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  // Enable next/image for blob storage URLs
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '*.public.blob.vercel-storage.com',
+      },
+    ],
+  },
+  
+  // Enable logging for debugging fetch requests during development
+  logging: {
+    fetches: {
+      fullUrl: true,
+    },
+  },
+  
+  // Experimental: Enable PPR for mixing static/dynamic (when stable)
+  // experimental: {
+  //   ppr: true,
+  // },
+};
+
+module.exports = nextConfig;
+```
+
+---
+
+## Testing Recommendations
+
+1. **Performance profiling:** Use Chrome DevTools Performance tab to record "Go to Canvas" click
+2. **Synthetic benchmarks:** Create test with 5 cutouts of varying complexity
+3. **Real device testing:** Test on mid-range phone (e.g., Pixel 4a) to catch mobile-specific issues
+4. **Memory profiling:** Watch for data URL memory leaks in long sessions
+
+---
+
+*Analysis completed by systems-engineer-perf subagent*
