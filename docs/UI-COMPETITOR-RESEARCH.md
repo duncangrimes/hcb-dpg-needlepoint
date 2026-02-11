@@ -1,4 +1,7 @@
 # UI/UX Competitor Research
+
+> **Type:** Reference — Historical research informing design decisions
+
 ## Photo Cutout & Collage Mobile Apps
 
 **Date:** February 5, 2026  

@@ -1,5 +1,7 @@
 # Lasso Editor Feature Specification
 
+> **Status:** Implemented — See [MVP.md](./MVP.md) for current state
+
 ## Vision
 
 Give users **complete control** over what appears in their needlepoint canvas. Instead of relying on AI to guess what's important, users draw selections around exactly what they want.
@@ -348,9 +350,11 @@ User Selections
 ## Next Steps
 
 1. ✅ Document spec (this file)
-2. [ ] Set up state management (Zustand or Recoil)
-3. [ ] Build basic LassoCanvas component
-4. [ ] Implement path drawing + closing
-5. [ ] Pixel extraction from lasso
-6. [ ] Wire to pipeline (bypass rembg)
-7. [ ] Test end-to-end
+2. ✅ Set up state management (Zustand)
+3. ✅ Build basic LassoCanvas component
+4. ✅ Implement path drawing + closing
+5. ✅ Pixel extraction from lasso
+6. ✅ Wire to pipeline
+7. ✅ Test end-to-end
+
+*Initial implementation complete — see [MVP.md](./MVP.md) for ongoing work.*

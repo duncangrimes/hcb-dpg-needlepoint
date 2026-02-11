@@ -1,10 +1,11 @@
 # HCB Needlepoint Canvas Generator
+
 ## Technical Specification Document
 
 **Version:** 1.0  
 **Date:** February 4, 2026  
 **Authors:** Duncan Grimes, Duncbot  
-**Status:** Draft  
+**Status:** Reference — See [MVP.md](./MVP.md) for current development status  
 
 ---
 

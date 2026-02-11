@@ -7,9 +7,11 @@ import prisma from "@/lib/prisma";
 import {
   processImageForManufacturing,
 } from "@/lib/upload/manufacturer-image-processing";
+import { generateAllImages } from "@/lib/images";
+import type { ImageDimensions } from "@/lib/images";
 import type { Thread } from "@/lib/colors";
 import { pointInPolygon } from "@/lib/editor/geometry";
-import type { PlacedCutout, Cutout, CanvasConfig, Point } from "@/types/editor";
+import type { PlacedCutout, Cutout, CanvasConfig } from "@/types/editor";
 
 export interface GenerateCanvasInput {
   /** Canvas ID (if updating existing canvas) */
@@ -26,8 +28,12 @@ export interface GenerateCanvasInput {
 
 export interface GenerateCanvasResult {
   success: boolean;
-  /** Manufacturer image as data URL or blob URL */
+  /** Manufacturer image blob URL (high-res PNG with DPI) */
   manufacturerImageUrl?: string;
+  /** Canvas preview with mesh grid overlay (data URL) */
+  canvasPreviewUrl?: string;
+  /** Stitched preview - clean finished look (data URL) */
+  stitchedPreviewUrl?: string;
   /** Saved canvas ID */
   canvasId?: string | null;
   /** Thread list */
@@ -100,17 +106,33 @@ export async function generateCanvasAction(
 
     const stitchabilityScore = result.stitchabilityScore;
 
+    // Generate all 3 image outputs from the stitch map
+    const dimensions: ImageDimensions = {
+      widthInches: canvasConfig.widthInches,
+      heightInches: canvasConfig.heightInches,
+      meshCount: canvasConfig.meshCount,
+      widthStitches,
+      heightStitches,
+    };
+
+    const images = await generateAllImages({
+      stitchMapBuffer: result.manufacturerImageBuffer,
+      dimensions,
+    });
+
     // Upload to blob storage and save to database if authenticated
     let manufacturerImageUrl: string;
+    let canvasPreviewUrl: string | undefined = images.canvasPreview.dataUrl;
+    let stitchedPreviewUrl: string | undefined = images.stitchedPreview.dataUrl;
     let savedCanvasId = input.canvasId;
     
     try {
       const session = await auth();
       if (session?.user?.id) {
-        // Upload to Vercel Blob
+        // Upload manufacturer image to Vercel Blob (high-res PNG with DPI)
         const blob = await put(
           `canvases/${session.user.id}/${Date.now()}-manufacturer.png`,
-          result.manufacturerImageBuffer,
+          images.manufacturer.buffer,
           { access: "public", contentType: "image/png" }
         );
         manufacturerImageUrl = blob.url;
@@ -146,18 +168,20 @@ export async function generateCanvasAction(
           savedCanvasId = newCanvas.id;
         }
       } else {
-        // No auth - use data URL
-        manufacturerImageUrl = `data:image/png;base64,${result.manufacturerImageBuffer.toString("base64")}`;
+        // No auth - use data URL for manufacturer image
+        manufacturerImageUrl = `data:image/png;base64,${images.manufacturer.buffer.toString("base64")}`;
       }
     } catch (saveError) {
       console.error("Failed to save canvas:", saveError);
       // Fallback to data URL if save fails
-      manufacturerImageUrl = `data:image/png;base64,${result.manufacturerImageBuffer.toString("base64")}`;
+      manufacturerImageUrl = `data:image/png;base64,${images.manufacturer.buffer.toString("base64")}`;
     }
 
     return {
       success: true,
       manufacturerImageUrl,
+      canvasPreviewUrl,
+      stitchedPreviewUrl,
       canvasId: savedCanvasId,
       threads,
       stitchabilityScore,

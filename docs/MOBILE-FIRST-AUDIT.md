@@ -1,7 +1,8 @@
 # Mobile-First Audit & Implementation Plan
 
 **Date:** February 5, 2026  
-**Priority:** HIGH — This is where our users' photos live
+**Priority:** HIGH — This is where our users' photos live  
+**Status:** Partially implemented — see checklist below
 
 ---
 

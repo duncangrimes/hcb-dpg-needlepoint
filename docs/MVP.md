@@ -256,4 +256,8 @@ src/
 
 ---
 
-*This document consolidates: LASSO-EDITOR-SPEC.md, UI-COMPETITOR-RESEARCH.md, MOBILE-FIRST-AUDIT.md, TECHNICAL-SPECIFICATION.md*
+**See also:**
+- [TECHNICAL-SPECIFICATION.md](./TECHNICAL-SPECIFICATION.md) — Full technical details, data models, APIs
+- [LASSO-EDITOR-SPEC.md](./LASSO-EDITOR-SPEC.md) — Detailed lasso tool implementation
+- [MOBILE-FIRST-AUDIT.md](./MOBILE-FIRST-AUDIT.md) — Mobile UX requirements
+- [UI-COMPETITOR-RESEARCH.md](./UI-COMPETITOR-RESEARCH.md) — Competitor analysis

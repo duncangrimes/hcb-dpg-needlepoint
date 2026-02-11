@@ -1,5 +1,7 @@
 # UX Research: Unauthenticated User Flows in Creative Tools
 
+> **Type:** Reference — Research informing auth flow design decisions
+
 ## Executive Summary
 
 After analyzing 6 creative/craft tools (NeedlePaint, StitchFiddle, Pic2Pat, Remove.bg, Photopea, and Figma), the dominant pattern is **"try before you sign up"** - allowing users to experience the core value proposition before requiring authentication.

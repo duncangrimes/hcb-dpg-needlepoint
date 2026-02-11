@@ -1,94 +1,162 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# HCB Needlepoint Canvas Generator
 
-## Image Processing Pipeline
+Transform your photos into custom needlepoint canvases with complete creative control.
 
-The application converts raw images into manufacturing-ready needlepoint patterns where each pixel represents one stitch. The pipeline prioritizes stitchability (practical stitching patterns) over pure visual aesthetics.
+![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)
+![Prisma](https://img.shields.io/badge/Prisma-ORM-2D3748?logo=prisma)
 
-### Pipeline Overview
+---
 
-The complete pipeline processes images through the following steps:
+## ✨ Features
 
-#### 1. **Metadata Extraction**
-- Extracts image dimensions and aspect ratio from the original image
-- Used to calculate proper stitch dimensions
+### 🖌️ Lasso Selection Tool
+Draw freeform selections around exactly what you want in your canvas — pets, people, objects. No AI guessing; you're in control.
 
-#### 2. **Stitch Dimension Calculation**
-- Calculates target dimensions based on canvas width (inches) and mesh count (stitches per inch)
-- Ensures the output matches the physical canvas size
+### 🎨 Photo-to-Needlepoint Pipeline
+Advanced image processing converts your photos into stitchable patterns:
+- **Color quantization** using Wu's algorithm
+- **DMC thread mapping** to real embroidery floss colors
+- **Majority filtering** eliminates impractical "confetti" stitches
+- **Stitchability scoring** tells you how easy the pattern is to stitch
 
-#### 3. **Edge Density Analysis** (Adaptive Pre-processing)
-- Uses Sobel operator to detect edges and calculate image complexity
-- Determines edge density ratio (percentage of edge pixels)
-- **Purpose**: Identifies high-detail images that need more aggressive noise reduction
+### 📐 Canvas Composition
+Arrange multiple cutouts on your canvas:
+- Drag, scale, and rotate elements
+- Layer ordering and management
+- Background patterns (solid, gingham, stripes)
+- Configurable canvas size and mesh count
 
-#### 4. **Resize with Adaptive Blur**
-- Resizes image to exact stitch dimensions using Lanczos3 interpolation
-- Applies adaptive blur based on edge density:
-  - **High-detail images** (>25% edge density): sigma = 1.0 (moderate blur to reduce noise)
-  - **Normal images** (≤25% edge density): sigma = 0.3 (minimal blur to preserve sharpness)
-- Applies moderate saturation boost (1.3x) and slight brightness adjustment (1.02x)
-- **Purpose**: Reduces noise in complex images while preserving detail in simple designs
+### 📱 Mobile-First Design
+Optimized for the device where your photos live:
+- Touch-friendly lasso drawing
+- Camera capture integration
+- Responsive, thumb-zone-aware UI
 
-#### 5. **Color Correction**
-- **Auto White Balance**: Neutralizes color casts (e.g., green from foliage) using gray world assumption
-- **LAB Color Space Processing**: Converts to LAB for perceptual accuracy, applies subtle adjustments
-- **Purpose**: Ensures accurate color representation before quantization
+---
 
-#### 6. **Color Quantization** (Wu's Algorithm)
-- Reduces image to the specified number of colors (typically 12-30)
-- Uses Wu's quantizer for smoother color transitions
-- **Purpose**: Creates a limited palette suitable for thread colors
+## 🛠️ Tech Stack
 
-#### 7. **Thread Mapping**
-- Maps quantized colors to actual thread colors from the DMC palette
-- Filters to vibrant threads only
-- **Purpose**: Ensures all colors in the pattern correspond to available thread shades
+| Layer | Technology |
+|-------|------------|
+| Framework | Next.js 15 (App Router) |
+| Language | TypeScript |
+| State | Zustand + zundo (undo/redo) |
+| Canvas | react-konva |
+| Database | PostgreSQL + Prisma |
+| Storage | Vercel Blob |
+| Auth | Auth.js (NextAuth v5) |
+| Styling | Tailwind CSS + Headless UI |
+| Image Processing | Sharp |
 
-#### 8. **Perceptual Dithering**
-- Applies Floyd-Steinberg dithering in OKLab color space for perceptual accuracy
-- Uses error diffusion to simulate gradients with limited colors
-- **Purpose**: Improves visual quality while maintaining discrete thread colors
+---
 
-#### 9. **Majority Filtering** (Post-processing)
-- Applies 3×3 majority filter to remove isolated pixels and small clusters
-- Each pixel is set to the most common color in its 3×3 neighborhood
-- **Purpose**: Eliminates "confetti" patterns (isolated 1-2 pixel clusters) that are impractical to stitch
-- **Impact**: Reduces thread changes by consolidating small color regions
+## 🚀 Getting Started
 
-#### 10. **Thread Counting**
-- Counts stitches per thread color by analyzing the final image
-- Maps RGB colors to thread colors and counts occurrences
-- **Purpose**: Provides material estimation (helps users determine skeins needed)
+### Prerequisites
 
-#### 11. **Stitchability Score Calculation**
-- Calculates average horizontal run length (consecutive same-color stitches per row)
-- **Score Interpretation**:
-  - **>7**: Excellent (long runs, easy to stitch)
-  - **5-7**: Good (reasonable runs)
-  - **3-5**: Fair (moderate color changes)
-  - **<3**: Poor (many color changes, consider reducing colors)
-- **Purpose**: Quantifies pattern practicality and flags patterns that may need re-processing
+- Node.js 20+
+- PostgreSQL database
+- Vercel Blob storage (or compatible S3)
 
-### Key Design Principles
+### Installation
 
-- **1 Pixel = 1 Stitch**: Each pixel in the manufacturing image directly maps to a painted stitch on the canvas
-- **No Anti-aliasing**: Removed from manufacturing pipeline to ensure pixel-accurate color mapping (anti-aliasing introduces blended colors that don't match discrete thread shades)
-- **Stitchability First**: Pipeline optimizes for practical stitching patterns over pure visual smoothness
-- **Adaptive Processing**: Adjusts blur and filtering based on image characteristics
+```bash
+# Clone the repository
+git clone https://github.com/duncangrimes/hcb-dpg-needlepoint.git
+cd hcb-dpg-needlepoint
+
+# Install dependencies
+npm install
+
+# Set up environment variables
+cp .env.example .env.local
+# Edit .env.local with your database and storage credentials
+
+# Run database migrations
+npx prisma migrate dev
+
+# Start the development server
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) to see the app.
+
+---
+
+## 📁 Project Structure
+
+```
+src/
+├── app/                    # Next.js App Router
+│   ├── editor/             # Main editor page
+│   └── api/                # API routes
+├── components/
+│   └── editor/             # Editor components
+│       ├── LassoCanvas     # Lasso drawing surface
+│       ├── ArrangeCanvas   # Composition canvas
+│       └── PreviewStep     # Result display
+├── stores/
+│   └── editor-store.ts     # Zustand state management
+├── lib/
+│   ├── colors/             # Color processing pipeline
+│   └── editor/             # Geometry & extraction
+└── data/
+    └── dmc-threads.json    # DMC thread color database
+```
+
+---
+
+## 🖼️ Image Processing Pipeline
+
+The pipeline transforms photos into manufacturer-ready needlepoint patterns where **1 pixel = 1 stitch**:
+
+1. **Resize** to target stitch dimensions (based on canvas size × mesh count)
+2. **Color correct** with auto white balance
+3. **Quantize** to limited color palette (Wu's algorithm)
+4. **Map** colors to DMC thread codes
+5. **Dither** in perceptual color space (OKLab)
+6. **Filter** with majority filter to remove confetti pixels
+7. **Score** stitchability based on horizontal run lengths
 
 ### Output
 
-The pipeline produces:
-- **Manufacturer Image**: Pixel-accurate image where each pixel = one stitch color
-- **Thread List**: Array of threads with stitch counts for each color
-- **Stitchability Score**: Metric indicating how practical the pattern is to stitch
-- **Dimensions**: Stitch dimensions and original image dimensions
+- **Manufacturer Image** — pixel-accurate PNG (1 pixel = 1 stitch)
+- **Thread List** — DMC codes with stitch counts
+- **Stitchability Score** — how practical the pattern is to stitch
 
-## Getting Started
+---
 
-First, run the development server:
+## 📚 Documentation
 
-```bash
-npm run devL
-```
+Detailed documentation is available in the [`docs/`](./docs/) folder:
 
+- **[MVP Specification](./docs/MVP.md)** — Current features and roadmap
+- **[Technical Spec](./docs/TECHNICAL-SPECIFICATION.md)** — Architecture and data models
+- **[Performance Analysis](./docs/PERFORMANCE-ANALYSIS.md)** — Optimization recommendations
+- **[Color Palette](./docs/COLOR-PALETTE.md)** — Brand design system
+
+---
+
+## 🎨 Color Palette
+
+| Color | Hex | Usage |
+|-------|-----|-------|
+| Terracotta | `#E86142` | Primary brand, CTAs |
+| Sage | `#7A8A5E` | Secondary, accents |
+| Golden Thread | `#FBBF24` | Highlights, badges |
+| Stone | `#7A756C` | Text, neutrals |
+
+See [COLOR-PALETTE.md](./docs/COLOR-PALETTE.md) for the full palette.
+
+---
+
+## 📝 License
+
+Private project for HCB Needlepoint.
+
+---
+
+## 🤝 Contributing
+
+This is a private project. Contact the maintainers for contribution guidelines.
