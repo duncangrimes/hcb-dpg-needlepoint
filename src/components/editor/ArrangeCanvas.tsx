@@ -5,7 +5,11 @@ import { Stage, Layer, Rect, Image as KonvaImage, Transformer, Group } from "rea
 import type Konva from "konva";
 import { useEditorStore, usePlacedCutoutsSorted } from "@/stores/editor-store";
 import type { PlacedCutout, Transform } from "@/types/editor";
-import { extractCutoutWithWorker } from "@/lib/editor/extraction-worker";
+import { 
+  startExtraction, 
+  getExtractionResult,
+  getCacheStats 
+} from "@/lib/editor/extraction-cache";
 import { ArrowPathIcon } from "@heroicons/react/24/outline";
 
 interface ArrangeCanvasProps {
@@ -115,7 +119,7 @@ export function ArrangeCanvas({ className }: ArrangeCanvasProps) {
   }, []);
 
   // Extract cutout images when placed cutouts change
-  // Uses Promise.allSettled for parallel loading (1-2s faster)
+  // Uses extraction cache for eager-loaded extractions from LassoCanvas
   useEffect(() => {
     // Skip if no placements
     if (placedCutouts.length === 0) return;
@@ -127,11 +131,17 @@ export function ArrangeCanvas({ className }: ArrangeCanvasProps) {
       setIsExtracting(true);
       setExtractionError(null);
       
+      // Log cache stats for debugging
+      const stats = getCacheStats();
+      console.log(`[ArrangeCanvas] Starting extraction. Cache: ${stats.completed} completed, ${stats.pending} pending`);
+      const startTime = Date.now();
+      
       // Process all cutouts in parallel
       const extractionPromises = placedCutouts.map(async (placed): Promise<{ cutoutId: string; image: CutoutImage } | null> => {
-        // Check if we already have this cutout extracted
+        // Check if we already have this cutout extracted (component-level cache)
         const existing = cutoutImages.get(placed.cutoutId);
         if (existing) {
+          console.log(`[ArrangeCanvas] Using component cache for ${placed.cutoutId}`);
           return { cutoutId: placed.cutoutId, image: existing };
         }
 
@@ -143,8 +153,13 @@ export function ArrangeCanvas({ className }: ArrangeCanvasProps) {
         }
 
         try {
-          // If cutout has a pre-extracted URL, use it (faster)
+          let dataUrl: string;
+          let width: number;
+          let height: number;
+
+          // Priority 1: Check if cutout has a pre-extracted URL from database (fastest)
           if (cutout.extractedUrl) {
+            console.log(`[ArrangeCanvas] Using database URL for ${placed.cutoutId}`);
             const img = await loadImage(cutout.extractedUrl);
             return {
               cutoutId: placed.cutoutId,
@@ -158,19 +173,36 @@ export function ArrangeCanvas({ className }: ArrangeCanvasProps) {
             };
           }
 
-          // Otherwise, extract from source image
-          const source = sourceImages.find((s) => s.id === cutout.sourceImageId);
-          if (!source) {
-            console.warn("Source image not found:", cutout.sourceImageId);
-            return null;
-          }
+          // Priority 2: Check extraction cache (may have started in LassoCanvas)
+          const cachedResult = getExtractionResult(placed.cutoutId);
+          if (cachedResult) {
+            console.log(`[ArrangeCanvas] Using extraction cache for ${placed.cutoutId}`);
+            dataUrl = cachedResult.dataUrl;
+            width = cachedResult.width;
+            height = cachedResult.height;
+          } else {
+            // Priority 3: Start extraction (or await pending one from LassoCanvas)
+            const source = sourceImages.find((s) => s.id === cutout.sourceImageId);
+            if (!source) {
+              console.warn("Source image not found:", cutout.sourceImageId);
+              return null;
+            }
 
-          // Extract the cutout pixels (uses Web Worker if available)
-          const { dataUrl, width, height } = await extractCutoutWithWorker(
-            source.url,
-            cutout.path,
-            { padding: 4, featherRadius: 2 }
-          );
+            // Use startExtraction which will return existing promise if one exists
+            console.log(`[ArrangeCanvas] Awaiting extraction for ${placed.cutoutId}`);
+            const result = await startExtraction(
+              placed.cutoutId,
+              source.url,
+              cutout.path,
+              async (url, path) => {
+                const { extractCutoutWithWorker } = await import("@/lib/editor/extraction-worker");
+                return extractCutoutWithWorker(url, path, { padding: 4, featherRadius: 2 });
+              }
+            );
+            dataUrl = result.dataUrl;
+            width = result.width;
+            height = result.height;
+          }
 
           // Load as image (dataUrl is always a data URL, no crossOrigin needed)
           const img = new Image();
@@ -214,6 +246,9 @@ export function ArrangeCanvas({ className }: ArrangeCanvasProps) {
       if (hasErrors && newImages.size === 0) {
         setExtractionError("Failed to extract cutouts");
       }
+
+      const elapsed = Date.now() - startTime;
+      console.log(`[ArrangeCanvas] Extraction complete in ${elapsed}ms for ${newImages.size} cutouts`);
 
       setCutoutImages(newImages);
       setIsExtracting(false);

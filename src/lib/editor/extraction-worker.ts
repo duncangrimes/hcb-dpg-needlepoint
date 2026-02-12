@@ -26,11 +26,13 @@ function initWorker(): Worker | null {
   try {
     // Check if we're in a browser environment with Worker support
     if (typeof window === "undefined" || !window.Worker) {
+      console.log("[extraction-worker] No Worker support, using main thread");
       workerSupported = false;
       return null;
     }
 
     // Create worker from URL
+    console.log("[extraction-worker] Creating Web Worker...");
     worker = new Worker(
       new URL("../../workers/extraction.worker.ts", import.meta.url),
       { type: "module" }
@@ -45,25 +47,31 @@ function initWorker(): Worker | null {
       pendingExtractions.delete(msg.id);
 
       if (msg.type === "result") {
+        console.log(`[extraction-worker] Worker completed: ${msg.id}`);
         pending.resolve(msg.imageData);
       } else if (msg.type === "error") {
+        console.error(`[extraction-worker] Worker error: ${msg.error}`);
         pending.reject(new Error(msg.error));
       }
     };
 
     worker.onerror = (e) => {
-      console.error("Extraction worker error:", e);
+      console.error("[extraction-worker] Worker error:", e);
       // Reject all pending extractions
       for (const [id, { reject }] of pendingExtractions) {
         reject(new Error("Worker error"));
         pendingExtractions.delete(id);
       }
+      // Mark worker as unsupported after error
+      workerSupported = false;
+      worker = null;
     };
 
+    console.log("[extraction-worker] Web Worker initialized successfully");
     workerSupported = true;
     return worker;
   } catch (err) {
-    console.warn("Web Worker not supported, falling back to main thread:", err);
+    console.warn("[extraction-worker] Web Worker failed, using main thread:", err);
     workerSupported = false;
     return null;
   }
@@ -133,10 +141,12 @@ export async function extractCutoutWithWorker(
 
   // Try to use worker
   const workerInstance = initWorker();
+  const extractionStart = Date.now();
   
   if (workerInstance) {
-    // Process in worker
+    // Process in worker (off main thread)
     const id = generateId();
+    console.log(`[extraction-worker] Processing ${cropWidth}x${cropHeight} in Web Worker...`);
     
     const processedImageData = await new Promise<ImageData>((resolve, reject) => {
       pendingExtractions.set(id, { resolve, reject });
@@ -155,9 +165,11 @@ export async function extractCutoutWithWorker(
       }, [imageData.data.buffer]);
     });
 
+    console.log(`[extraction-worker] Worker extraction took ${Date.now() - extractionStart}ms`);
     // Put processed data back on canvas
     ctx.putImageData(processedImageData, 0, 0);
   } else {
+    console.log(`[extraction-worker] Processing ${cropWidth}x${cropHeight} on MAIN THREAD (fallback)...`);
     // Fallback: process on main thread (original implementation)
     const { pointInPolygon } = await import("./geometry");
     const data = imageData.data;
@@ -196,6 +208,7 @@ export async function extractCutoutWithWorker(
       }
     }
 
+    console.log(`[extraction-worker] Main thread extraction took ${Date.now() - extractionStart}ms`);
     ctx.putImageData(imageData, 0, 0);
   }
 

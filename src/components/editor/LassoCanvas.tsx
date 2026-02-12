@@ -4,6 +4,7 @@ import { useRef, useState, useCallback, useEffect } from "react";
 import { Stage, Layer, Line, Circle, Image as KonvaImage } from "react-konva";
 import { useEditorStore, useActiveSource } from "@/stores/editor-store";
 import { saveCutout } from "@/actions/cutouts";
+import { startExtraction } from "@/lib/editor/extraction-cache";
 import type { Point } from "@/types/editor";
 
 interface LassoCanvasProps {
@@ -198,58 +199,57 @@ export function LassoCanvas({ className, onCutoutComplete }: LassoCanvasProps) {
       
       onCutoutComplete?.();
       
-      // Defer heavy extraction work to avoid UI freeze
-      // Use setTimeout to let the UI update first, then do extraction in idle time
-      setTimeout(() => {
-        // Use requestIdleCallback if available for better scheduling
-        const doExtraction = async () => {
-          try {
-            // Dynamically import extraction to avoid SSR issues
+      // EAGER EXTRACTION: Start extraction immediately, don't wait for navigation
+      // This runs in background - ArrangeCanvas will await the promise if needed
+      if (newCutoutId) {
+        // Start extraction immediately and cache the promise
+        // ArrangeCanvas will use startExtraction to get the same promise
+        const extractionPromise = startExtraction(
+          newCutoutId,
+          activeSource.url,
+          pathToSave,
+          async (url, path) => {
             const { extractCutoutWithWorker } = await import("@/lib/editor/extraction-worker");
-            const { createCutoutThumbnail } = await import("@/lib/editor/extraction");
-            
-            // Extract the cutout image (uses Web Worker if available)
-            const { dataUrl } = await extractCutoutWithWorker(
-              activeSource.url,
-              pathToSave,
-              { padding: 4, featherRadius: 2 }
-            );
-            
-            // Create thumbnail for library
-            const thumbnailDataUrl = await createCutoutThumbnail(dataUrl, 200);
-            
-            // Save to database with extracted images
-            const result = await saveCutout({
-              sourceImageId: activeSource.id,
-              path: pathToSave,
-              aspectRatio,
-              extractedDataUrl: dataUrl,
-              thumbnailDataUrl,
-            });
-            
-            if (!result.success) {
-              console.error("Failed to save cutout:", result.error);
-            } else if (result.cutout?.extractedUrl && newCutoutId) {
-              // Update the store's cutout with the blob storage URL
-              updateCutout(newCutoutId, { extractedUrl: result.cutout.extractedUrl });
+            return extractCutoutWithWorker(url, path, { padding: 4, featherRadius: 2 });
+          }
+        );
+        
+        // Handle extraction completion in background (don't block UI)
+        extractionPromise
+          .then(async ({ dataUrl }) => {
+            try {
+              const { createCutoutThumbnail } = await import("@/lib/editor/extraction");
+              const thumbnailDataUrl = await createCutoutThumbnail(dataUrl, 200);
+              
+              // Save to database with extracted images
+              const result = await saveCutout({
+                sourceImageId: activeSource.id,
+                path: pathToSave,
+                aspectRatio,
+                extractedDataUrl: dataUrl,
+                thumbnailDataUrl,
+              });
+              
+              if (!result.success) {
+                console.error("Failed to save cutout:", result.error);
+              } else if (result.cutout?.extractedUrl && newCutoutId) {
+                // Update the store's cutout with the blob storage URL
+                updateCutout(newCutoutId, { extractedUrl: result.cutout.extractedUrl });
+              }
+            } catch (err) {
+              console.error("Failed to save cutout:", err);
             }
-          } catch (err) {
-            console.error("Failed to extract/save cutout:", err);
+          })
+          .catch((err) => {
+            console.error("Failed to extract cutout:", err);
             // Still try to save without extracted image
             saveCutout({
               sourceImageId: activeSource.id,
               path: pathToSave,
               aspectRatio,
             });
-          }
-        };
-        
-        if ('requestIdleCallback' in window) {
-          (window as any).requestIdleCallback(doExtraction, { timeout: 2000 });
-        } else {
-          doExtraction();
-        }
-      }, 50); // Small delay to let UI update
+          });
+      }
     } else {
       cancelDrawing();
     }
