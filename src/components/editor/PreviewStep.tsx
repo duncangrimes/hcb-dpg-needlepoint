@@ -9,7 +9,39 @@ import { useAuthGate } from "@/hooks/useAuthGate";
 import { AuthModal } from "@/components/auth/AuthModal";
 import { clearEditorSession } from "@/hooks/useEditorPersistence";
 import { ArrowDownTrayIcon, ArrowPathIcon, SparklesIcon } from "@heroicons/react/24/outline";
+import { PreviewToggle, type PreviewView } from "./PreviewToggle";
+import { PreviewImage } from "./PreviewImage";
 import type { Thread } from "@/lib/colors";
+
+const PREVIEW_VIEW_STORAGE_KEY = "preview-view-preference";
+
+/**
+ * Get the saved preview view preference from localStorage
+ */
+function getSavedViewPreference(): PreviewView {
+  if (typeof window === "undefined") return "stitched";
+  try {
+    const saved = localStorage.getItem(PREVIEW_VIEW_STORAGE_KEY);
+    if (saved === "canvas" || saved === "stitched") {
+      return saved;
+    }
+  } catch {
+    // localStorage not available
+  }
+  return "stitched"; // Default to aspirational view
+}
+
+/**
+ * Save the preview view preference to localStorage
+ */
+function saveViewPreference(view: PreviewView): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(PREVIEW_VIEW_STORAGE_KEY, view);
+  } catch {
+    // localStorage not available
+  }
+}
 
 export function PreviewStep() {
   const router = useRouter();
@@ -26,6 +58,20 @@ export function PreviewStep() {
 
   const [result, setResult] = useState<GenerateCanvasResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  
+  // Preview toggle state with localStorage persistence
+  const [activeView, setActiveView] = useState<PreviewView>("stitched");
+  
+  // Load saved preference on mount
+  useEffect(() => {
+    setActiveView(getSavedViewPreference());
+  }, []);
+
+  // Handle view change with persistence
+  const handleViewChange = useCallback((view: PreviewView) => {
+    setActiveView(view);
+    saveViewPreference(view);
+  }, []);
 
   // Auth gate for download and generate
   const {
@@ -90,13 +136,6 @@ export function PreviewStep() {
     }
   }, [sourceImages, cutouts, placedCutouts, canvasConfig, canvasId, setProcessing, setCanvasId, router]);
 
-  // Note: Auto-generation removed for performance
-  // Users now explicitly click "Generate Canvas" button
-  // This saves ~3-5 seconds on navigation to preview step
-
-  // Generate is NOT gated - anyone can preview their canvas
-  // Only download requires authentication
-
   // Actual download logic
   const performDownload = useCallback(() => {
     if (!result?.manufacturerImageUrl) return;
@@ -156,6 +195,14 @@ export function PreviewStep() {
     );
   };
 
+  // Determine which preview URL to show (for manufacturer image fallback)
+  const currentPreviewUrl = activeView === "canvas" 
+    ? result?.canvasPreviewUrl 
+    : result?.stitchedPreviewUrl;
+
+  // Check if we have both preview URLs available
+  const hasBothPreviews = result?.canvasPreviewUrl && result?.stitchedPreviewUrl;
+
   return (
     <div className="h-full flex flex-col">
       {/* Auth Modal - only shows for download */}
@@ -193,33 +240,52 @@ export function PreviewStep() {
       {/* Preview area */}
       <div className="flex-1 relative overflow-hidden bg-stone-100 dark:bg-stone-800 p-4">
         <div className="h-full flex flex-col items-center justify-center gap-4 overflow-y-auto">
+          {/* Preview Toggle - only show when we have both preview types */}
+          {result && hasBothPreviews && (
+            <PreviewToggle
+              activeView={activeView}
+              onViewChange={handleViewChange}
+            />
+          )}
+
           {/* Canvas preview */}
-          <div
-            className="bg-white shadow-lg rounded-lg flex items-center justify-center overflow-hidden"
-            style={{
-              aspectRatio: `${canvasConfig.widthInches} / ${canvasConfig.heightInches}`,
-              maxWidth: "100%",
-              maxHeight: result ? "50%" : "60%",
-              width: "auto",
-              height: result ? "50%" : "60%",
-            }}
-          >
-            {result?.manufacturerImageUrl ? (
-              <img
-                src={result.manufacturerImageUrl}
-                alt="Generated needlepoint canvas"
-                className="w-full h-full object-contain"
-                style={{ imageRendering: "pixelated" }}
-              />
-            ) : (
-              <div className="text-center p-4">
-                <SparklesIcon className="w-12 h-12 mx-auto mb-2 text-terracotta-400" />
-                <p className="text-stone-600 dark:text-stone-400">
-                  Ready to generate
-                </p>
-              </div>
-            )}
-          </div>
+          {result && hasBothPreviews ? (
+            <PreviewImage
+              canvasPreviewUrl={result.canvasPreviewUrl!}
+              stitchedPreviewUrl={result.stitchedPreviewUrl!}
+              activeView={activeView}
+              onViewChange={handleViewChange}
+              aspectRatio={`${canvasConfig.widthInches} / ${canvasConfig.heightInches}`}
+            />
+          ) : (
+            <div
+              className="bg-white shadow-lg rounded-lg flex items-center justify-center overflow-hidden"
+              style={{
+                aspectRatio: `${canvasConfig.widthInches} / ${canvasConfig.heightInches}`,
+                maxWidth: "100%",
+                maxHeight: result ? "50%" : "60%",
+                width: "auto",
+                height: result ? "50%" : "60%",
+              }}
+            >
+              {/* Fallback: show manufacturer image or placeholder */}
+              {result?.manufacturerImageUrl || currentPreviewUrl ? (
+                <img
+                  src={currentPreviewUrl || result?.manufacturerImageUrl}
+                  alt="Generated needlepoint canvas"
+                  className="w-full h-full object-contain"
+                  style={{ imageRendering: "pixelated" }}
+                />
+              ) : (
+                <div className="text-center p-4">
+                  <SparklesIcon className="w-12 h-12 mx-auto mb-2 text-terracotta-400" />
+                  <p className="text-stone-600 dark:text-stone-400">
+                    Ready to generate
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Error message */}
           {error && (
