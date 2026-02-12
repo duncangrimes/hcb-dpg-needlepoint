@@ -1040,6 +1040,80 @@ describe('generateAllImages', () => {
 
 ---
 
+---
+
+## Frontend Implementation (Phase 4)
+
+### Preview Display Component
+
+Based on UX research (`PREVIEW-UX-RESEARCH.md`), the frontend should display **Canvas Preview** and **Stitched Preview** using a segmented toggle + swipe pattern.
+
+**Note:** Manufacturer image is NOT shown to users — it's only used for production/download.
+
+### Component Structure
+
+```
+src/components/editor/
+├── PreviewStep.tsx          # Update to use new preview display
+├── PreviewToggle.tsx        # NEW: Segmented toggle component
+└── PreviewImage.tsx         # NEW: Swipeable image container
+```
+
+### UI Design
+
+```
+┌─────────────────────────────────────┐
+│  ┌───────────────────────────────┐  │
+│  │  Your Canvas │ When Stitched ●│  │  ← Segmented toggle
+│  └───────────────────────────────┘  │
+│                                     │
+│  ┌───────────────────────────────┐  │
+│  │                               │  │
+│  │      [PREVIEW IMAGE]          │  │  ← Full-width, swipeable
+│  │                               │  │
+│  └───────────────────────────────┘  │
+└─────────────────────────────────────┘
+```
+
+### Behavior
+
+| Setting | Value |
+|---------|-------|
+| **Default view** | "When Stitched" (aspirational) |
+| **Toggle labels** | "Your Canvas" / "When Stitched" |
+| **Interactions** | Tap toggle OR swipe image |
+| **Animation** | 300ms crossfade between views |
+| **Persistence** | Remember last view in localStorage |
+
+### Data Flow
+
+```typescript
+// PreviewStep receives from generateCanvasAction:
+interface GenerateCanvasResult {
+  // ... existing fields
+  canvasPreviewUrl?: string;    // Data URL with mesh grid
+  stitchedPreviewUrl?: string;  // Data URL, clean
+}
+
+// PreviewStep state:
+const [activeView, setActiveView] = useState<'canvas' | 'stitched'>('stitched');
+const previewUrl = activeView === 'canvas' 
+  ? result.canvasPreviewUrl 
+  : result.stitchedPreviewUrl;
+```
+
+### Implementation Checklist
+
+- [ ] Create `PreviewToggle.tsx` — segmented control component
+- [ ] Create `PreviewImage.tsx` — swipeable image with crossfade
+- [ ] Update `PreviewStep.tsx` — integrate toggle and both preview URLs
+- [ ] Add swipe gesture support (use `react-swipeable` or native touch events)
+- [ ] Add localStorage persistence for view preference
+- [ ] Ensure accessibility (keyboard nav, aria labels)
+- [ ] Test on mobile devices
+
+---
+
 ## Summary
 
 This architecture provides:

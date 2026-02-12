@@ -2,6 +2,7 @@
 
 import { Fragment, useState, useCallback } from "react";
 import { Dialog, DialogPanel, DialogTitle, Transition, TransitionChild } from "@headlessui/react";
+import { ArrowPathIcon, ArrowUturnLeftIcon, PencilIcon, TrashIcon, ScissorsIcon, ArrowRightIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { useEditorStore, useActiveSource, useEditorHistory } from "@/stores/editor-store";
 import { LassoCanvas } from "./LassoCanvas";
 
@@ -19,6 +20,7 @@ export function ClipModal({ isOpen, onClose, onGoToCanvas }: ClipModalProps) {
   const activeCutoutId = useEditorStore((s) => s.activeCutoutId);
   const removeCutout = useEditorStore((s) => s.removeCutout);
   const isDrawing = useEditorStore((s) => s.isDrawing);
+  const cancelDrawing = useEditorStore((s) => s.cancelDrawing);
   
   const { undo, canUndo } = useEditorHistory();
   
@@ -76,9 +78,9 @@ export function ClipModal({ isOpen, onClose, onGoToCanvas }: ClipModalProps) {
               <div className="flex items-center justify-between px-4 py-3 bg-stone-800">
                 <button
                   onClick={onClose}
-                  className="text-white font-medium"
+                  className="text-white font-medium flex items-center gap-1"
                 >
-                  ✕ Cancel
+                  <XMarkIcon className="w-5 h-5" /> Cancel
                 </button>
                 <DialogTitle className="text-white font-medium">
                   Draw Selection
@@ -112,15 +114,15 @@ export function ClipModal({ isOpen, onClose, onGoToCanvas }: ClipModalProps) {
                   <div className="flex gap-3">
                     <button
                       onClick={handleContinueClipping}
-                      className="flex-1 py-3 bg-stone-700 text-white rounded-xl font-medium"
+                      className="flex-1 py-3 bg-stone-700 text-white rounded-xl font-medium flex items-center justify-center gap-2"
                     >
-                      ✂️ Add Another Cutout
+                      <ScissorsIcon className="w-5 h-5" /> Add Another Cutout
                     </button>
                     <button
                       onClick={handleGoToCanvas}
-                      className="flex-1 py-3 bg-terracotta-500 text-white rounded-xl font-medium"
+                      className="flex-1 py-3 bg-terracotta-500 text-white rounded-xl font-medium flex items-center justify-center gap-2"
                     >
-                      Go to Canvas →
+                      Go to Canvas <ArrowRightIcon className="w-5 h-5" />
                     </button>
                   </div>
                 ) : (
@@ -129,28 +131,42 @@ export function ClipModal({ isOpen, onClose, onGoToCanvas }: ClipModalProps) {
                     <div className="flex gap-2">
                       <button
                         onClick={() => setTool("lasso")}
-                        className={`px-4 py-2 rounded-lg font-medium ${
+                        className={`px-4 py-2 rounded-lg font-medium flex items-center gap-1.5 ${
                           tool === "lasso"
                             ? "bg-terracotta-500 text-white"
                             : "bg-stone-700 text-stone-300"
                         }`}
                       >
-                        ✏️ Lasso
+                        <PencilIcon className="w-4 h-4" /> Lasso
                       </button>
-                      <button
-                        onClick={() => undo()}
-                        disabled={!canUndo}
-                        className="px-4 py-2 bg-stone-700 text-stone-300 rounded-lg font-medium disabled:opacity-40"
-                      >
-                        ↩️ Undo
-                      </button>
+                      
+                      {/* Clear button - appears while actively drawing */}
+                      {isDrawing && (
+                        <button
+                          onClick={cancelDrawing}
+                          className="px-4 py-2 bg-stone-700 text-stone-300 rounded-lg font-medium hover:bg-stone-600 active:bg-stone-500 flex items-center gap-1.5"
+                        >
+                          <ArrowPathIcon className="w-4 h-4" /> Clear
+                        </button>
+                      )}
+                      
+                      {/* Undo button - for completed cutouts */}
+                      {!isDrawing && (
+                        <button
+                          onClick={() => undo()}
+                          disabled={!canUndo}
+                          className="px-4 py-2 bg-stone-700 text-stone-300 rounded-lg font-medium disabled:opacity-40 flex items-center gap-1.5"
+                        >
+                          <ArrowUturnLeftIcon className="w-4 h-4" /> Undo
+                        </button>
+                      )}
                       
                       {activeCutoutId && (
                         <button
                           onClick={() => removeCutout(activeCutoutId)}
                           className="px-4 py-2 bg-error/80 text-white rounded-lg font-medium"
                         >
-                          🗑️
+                          <TrashIcon className="w-5 h-5" />
                         </button>
                       )}
                     </div>
@@ -158,9 +174,9 @@ export function ClipModal({ isOpen, onClose, onGoToCanvas }: ClipModalProps) {
                     {cutoutCount > 0 && (
                       <button
                         onClick={handleGoToCanvas}
-                        className="px-4 py-2 bg-terracotta-500 text-white rounded-lg font-medium"
+                        className="px-4 py-2 bg-terracotta-500 text-white rounded-lg font-medium flex items-center gap-1.5"
                       >
-                        Done →
+                        Done <ArrowRightIcon className="w-4 h-4" />
                       </button>
                     )}
                   </div>
