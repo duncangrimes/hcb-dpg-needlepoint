@@ -45,12 +45,13 @@ function sameColor(r1: number, g1: number, b1: number, r2: number, g2: number, b
 }
 
 /**
- * Applies realistic tent stitch texture.
+ * Applies realistic tent stitch texture with clearly visible diagonal strokes.
  *
  * Key principles:
- * - Continuous diagonal thread texture across surface (no cell boundaries)
- * - Shadows ONLY at actual color boundaries
- * - Very subtle per-pixel variation for organic feel
+ * - Each stitch cell shows a VISIBLE diagonal line (lower-left to upper-right)
+ * - The diagonal is the main thread color; areas off the diagonal are shadowed
+ * - Shadow depth creates the "3D" ridge effect of real tent stitches
+ * - Subtle thread strand texture along the diagonal
  *
  * @param imageData - Raw RGBA pixel buffer
  * @param width - Image width in pixels
@@ -102,16 +103,47 @@ function applyStitchTexture(
       const baseG = imageData[idx + 1];
       const baseB = imageData[idx + 2];
 
+      // Position within cell (0-1 range)
       const localX = (x % cellSize) / cellSize;
       const localY = (y % cellSize) / cellSize;
 
-      // === CONTINUOUS DIAGONAL THREAD TEXTURE ===
-      // Thread strands run diagonally across the entire surface
-      // Uses GLOBAL position, not cell-local, for seamless texture
-      const globalDiag = (x - y);
-      const threadPhase = (globalDiag / cellSize * 3.5) % 1;
-      // Smooth sine wave for thread strand ridges
-      const threadTexture = 1.0 + Math.sin(threadPhase * Math.PI * 2) * 0.025;
+      // === DIAGONAL STITCH STROKE ===
+      // Tent stitch runs from lower-left (0,1) to upper-right (1,0)
+      // The diagonal line is where localX + localY ≈ 1.0
+      // Distance from diagonal: |localX + localY - 1|
+      const diagDist = Math.abs(localX + localY - 1.0);
+      
+      // Stitch thread width: ~30% of cell is the bright diagonal
+      // diagDist ranges 0 (on diagonal) to 1 (corners)
+      // We want: 0-0.15 = on thread (bright), 0.15-0.5 = falloff, >0.5 = shadow
+      const threadWidth = 0.20;
+      const falloffWidth = 0.25;
+      
+      let stitchBrightness: number;
+      if (diagDist < threadWidth) {
+        // On the diagonal thread - full brightness with slight ridge
+        const ridgePos = diagDist / threadWidth;
+        // Slight curve - brightest at center of thread
+        stitchBrightness = 1.05 - ridgePos * 0.05;
+      } else if (diagDist < threadWidth + falloffWidth) {
+        // Falloff zone - transition from thread to shadow
+        const falloffPos = (diagDist - threadWidth) / falloffWidth;
+        // Smooth falloff using cosine interpolation
+        const t = (1 - Math.cos(falloffPos * Math.PI)) / 2;
+        stitchBrightness = 1.0 - t * 0.18;
+      } else {
+        // Shadow zone - the "gap" where canvas would show through
+        // Darker at the corners, slightly lighter toward the diagonal
+        const shadowDepth = Math.min((diagDist - threadWidth - falloffWidth) / 0.3, 1.0);
+        stitchBrightness = 0.82 - shadowDepth * 0.05;
+      }
+
+      // === THREAD STRAND TEXTURE ===
+      // Fine diagonal ridges along the stitch direction
+      // These run perpendicular to the main diagonal (along the thread)
+      const threadAlongDiag = (localX - localY) * cellSize;
+      const strandPhase = (threadAlongDiag * 0.5) % 1;
+      const strandTexture = 1.0 + Math.sin(strandPhase * Math.PI * 2) * 0.03;
 
       // === SHADOW AT COLOR BOUNDARIES ===
       let boundaryShadow = 1.0;
@@ -121,38 +153,34 @@ function applyStitchTexture(
       const topColor = getCellColor(cellX, cellY - 1);
       const bottomColor = getCellColor(cellX, cellY + 1);
 
-      const threshold = 0.18;
+      const threshold = 0.15;
       
       if (localX < threshold && leftColor && 
           !sameColor(myColor.r, myColor.g, myColor.b, leftColor.r, leftColor.g, leftColor.b)) {
         const edgeDist = localX / threshold;
-        boundaryShadow = Math.min(boundaryShadow, 0.85 + edgeDist * 0.15);
+        boundaryShadow = Math.min(boundaryShadow, 0.88 + edgeDist * 0.12);
       }
       if (localX > (1 - threshold) && rightColor && 
           !sameColor(myColor.r, myColor.g, myColor.b, rightColor.r, rightColor.g, rightColor.b)) {
         const edgeDist = (1 - localX) / threshold;
-        boundaryShadow = Math.min(boundaryShadow, 0.85 + edgeDist * 0.15);
+        boundaryShadow = Math.min(boundaryShadow, 0.88 + edgeDist * 0.12);
       }
       if (localY < threshold && topColor && 
           !sameColor(myColor.r, myColor.g, myColor.b, topColor.r, topColor.g, topColor.b)) {
         const edgeDist = localY / threshold;
-        boundaryShadow = Math.min(boundaryShadow, 0.85 + edgeDist * 0.15);
+        boundaryShadow = Math.min(boundaryShadow, 0.88 + edgeDist * 0.12);
       }
       if (localY > (1 - threshold) && bottomColor && 
           !sameColor(myColor.r, myColor.g, myColor.b, bottomColor.r, bottomColor.g, bottomColor.b)) {
         const edgeDist = (1 - localY) / threshold;
-        boundaryShadow = Math.min(boundaryShadow, 0.85 + edgeDist * 0.15);
+        boundaryShadow = Math.min(boundaryShadow, 0.88 + edgeDist * 0.12);
       }
 
-      // === VERY SUBTLE LIGHT DIRECTION ===
-      // Light from upper-left
-      const lightFactor = 1.0 + 0.01 * (1 - (x + y) / (width + height));
-
       // === COMBINE FACTORS ===
-      const textureFactor = threadTexture * boundaryShadow * lightFactor;
+      const textureFactor = stitchBrightness * strandTexture * boundaryShadow;
 
-      // Very subtle per-pixel noise (fiber texture)
-      const noise = (random() - 0.5) * 3;
+      // Subtle per-pixel noise (fiber texture)
+      const noise = (random() - 0.5) * 2;
 
       const newR = baseR * textureFactor + noise;
       const newG = baseG * textureFactor + noise;
