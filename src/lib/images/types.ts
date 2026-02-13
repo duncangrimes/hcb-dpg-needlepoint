@@ -46,6 +46,10 @@ export interface FabricTextureConfig {
   opacity: number;
   /** Blend mode for texture overlay */
   blendMode: "multiply" | "overlay" | "soft-light";
+  /** Amount of noise/brightness variation for thread texture (default: 30) */
+  noiseAmount?: number;
+  /** Strength of diagonal pattern for tent stitch appearance (default: 5) */
+  diagonalStrength?: number;
 }
 
 /**

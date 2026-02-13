@@ -41,7 +41,7 @@
     "react-konva": "^19.2.2",
     "recoil": "^0.7.7",
     "resend": "^6.1.0",
-    "sharp": "^0.34.4",
+    "sharp": "^0.34.5",
     "skmeans": "^0.11.3",
     "tsconfig-paths": "^4.2.0",
     "tsx": "^4.21.0",
