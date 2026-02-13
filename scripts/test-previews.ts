@@ -1,7 +1,7 @@
 /**
  * Test script to generate preview images for quality evaluation
  * 
- * Run with: npx ts-node scripts/test-previews.ts
+ * Run with: npx tsx scripts/test-previews.ts
  */
 
 import sharp from "sharp";
@@ -17,40 +17,39 @@ import type { ImageDimensions } from "../src/lib/images/types";
 async function main() {
   console.log("🧪 Testing preview generation functions...\n");
 
-  // Create a simple test image (10x10 pixels with colored squares)
+  // Create a simple test image (20x20 pixels with colored quadrants)
   // This simulates a stitch-mapped image where each pixel = 1 stitch
   const testWidth = 20;
   const testHeight = 20;
   
-  // Create a colorful test pattern
+  // Create a test pattern with SOLID color quadrants (no checker)
+  // This tests that we don't introduce artificial checkerboard patterns
   const pixels = Buffer.alloc(testWidth * testHeight * 3);
   for (let y = 0; y < testHeight; y++) {
     for (let x = 0; x < testWidth; x++) {
       const idx = (y * testWidth + x) * 3;
-      // Create a checker pattern with different colors
-      const isEven = (x + y) % 2 === 0;
       const quadrant = (x < testWidth/2 ? 0 : 1) + (y < testHeight/2 ? 0 : 2);
       
       switch (quadrant) {
-        case 0: // Top-left: Red/Pink
-          pixels[idx] = isEven ? 220 : 180;
-          pixels[idx + 1] = isEven ? 60 : 100;
-          pixels[idx + 2] = isEven ? 60 : 100;
+        case 0: // Top-left: Solid Red
+          pixels[idx] = 200;
+          pixels[idx + 1] = 70;
+          pixels[idx + 2] = 70;
           break;
-        case 1: // Top-right: Blue/Cyan
-          pixels[idx] = isEven ? 60 : 100;
-          pixels[idx + 1] = isEven ? 100 : 150;
-          pixels[idx + 2] = isEven ? 200 : 220;
+        case 1: // Top-right: Solid Blue
+          pixels[idx] = 70;
+          pixels[idx + 1] = 110;
+          pixels[idx + 2] = 190;
           break;
-        case 2: // Bottom-left: Green/Sage
-          pixels[idx] = isEven ? 100 : 120;
-          pixels[idx + 1] = isEven ? 160 : 180;
-          pixels[idx + 2] = isEven ? 100 : 120;
+        case 2: // Bottom-left: Solid Green
+          pixels[idx] = 90;
+          pixels[idx + 1] = 160;
+          pixels[idx + 2] = 100;
           break;
-        case 3: // Bottom-right: Orange/Yellow
-          pixels[idx] = isEven ? 230 : 250;
-          pixels[idx + 1] = isEven ? 150 : 200;
-          pixels[idx + 2] = isEven ? 50 : 80;
+        case 3: // Bottom-right: Solid Orange/Gold
+          pixels[idx] = 220;
+          pixels[idx + 1] = 160;
+          pixels[idx + 2] = 60;
           break;
       }
     }

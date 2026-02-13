@@ -1,20 +1,31 @@
 /**
  * Canvas Preview Generation
  *
- * Generates a preview image showing the canvas with colored thread mesh.
- * The design colors ARE the threads (warp/weft) — dark holes show between them.
+ * Generates a preview image showing a realistic needlepoint canvas mesh.
+ * 
+ * REALITY MODEL (based on research):
+ * - Canvas is a WOVEN MESH with horizontal (weft) and vertical (warp) threads
+ * - Threads weave OVER and UNDER each other at intersections
+ * - Holes are the GAPS BETWEEN threads, NOT at thread intersections
+ * - Base color is ECRU/CREAM (warm off-white), not black
+ * - Threads are WIDER than holes (~60% thread, ~40% hole)
+ * - Paint/color is absorbed INTO the cotton threads
  *
- * Visual model:
- * - Each stitch cell has colored THREADS crossing over/under
- * - The THREADS are the design color (brightened)
- * - The HOLES (corner gaps between threads) are dark (canvas showing through)
- *
- * Cell pattern (5x5 example):
- * D C C C D    D = dark hole (canvas background)
- * C C C C C    C = stitch color (thread)
- * C C C C C
- * C C C C C
- * D C C C D
+ * Cell structure (each stitch cell):
+ * ```
+ *   ┌─────────────────────┐
+ *   │  H │  WARP THREAD   │ H │
+ *   ├────┼────────────────┼───┤
+ *   │  W │  INTERSECTION  │ W │
+ *   │  E │  (over/under)  │ E │
+ *   │  F │                │ F │
+ *   │  T │                │ T │
+ *   ├────┼────────────────┼───┤
+ *   │  H │  WARP THREAD   │ H │
+ *   └─────────────────────┘
+ *   H = Hole (gap showing ecru background)
+ *   WEFT/WARP = Colored threads
+ * ```
  */
 
 import sharp from "sharp";
@@ -41,13 +52,39 @@ function seededRandom(seed: number): () => number {
 }
 
 /**
- * Canvas background color (dark, showing through holes)
+ * Ecru/cream canvas background color - warm off-white
+ * This shows through the holes in the mesh
  */
-const CANVAS_BACKGROUND = { r: 40, g: 35, b: 30 };
+const ECRU_BACKGROUND = { r: 245, g: 240, b: 225 };
 
 /**
- * Applies canvas mesh texture where the design colors ARE the threads.
- * Dark holes appear at corners between threads.
+ * Desaturates and warms a color to simulate paint absorption into cotton
+ */
+function absorbColor(r: number, g: number, b: number): { r: number; g: number; b: number } {
+  // Reduce saturation by ~12%
+  const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+  const desatFactor = 0.88;
+  
+  const newR = gray + (r - gray) * desatFactor;
+  const newG = gray + (g - gray) * desatFactor;
+  const newB = gray + (b - gray) * desatFactor;
+  
+  // Add slight warm tint (cotton absorption)
+  return {
+    r: Math.min(255, newR + 3),
+    g: newG,
+    b: Math.max(0, newB - 2),
+  };
+}
+
+/**
+ * Applies realistic woven canvas mesh texture.
+ * 
+ * The mesh is modeled as:
+ * - Warp threads run vertically through each cell
+ * - Weft threads run horizontally through each cell
+ * - At intersections, one thread passes OVER the other (alternating pattern)
+ * - Holes are the gaps BETWEEN threads (at the four quadrant corners of each cell)
  *
  * @param imageData - Raw RGBA pixel buffer (colors already upscaled)
  * @param width - Image width in pixels
@@ -63,10 +100,15 @@ function applyCanvasMeshTexture(
   seed: number = 42
 ): void {
   const random = seededRandom(seed);
-
-  // Hole size relative to cell - corners are holes
-  // For a cell of size N, holes occupy ~20% of the corner
-  const holeRatio = 0.22;
+  
+  // Thread takes up ~60% of cell, hole gap is ~40%
+  // But the hole is at the CORNER where 4 cells meet, so within one cell
+  // we see quarter-holes at each corner
+  const threadRatio = 0.62; // Thread coverage
+  const holeRatio = 1 - threadRatio; // Hole/gap coverage
+  
+  // Half the hole width (since hole spans two cells)
+  const halfHole = holeRatio / 2;
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
@@ -80,64 +122,124 @@ function applyCanvasMeshTexture(
       const localX = (x % cellSize) / cellSize;
       const localY = (y % cellSize) / cellSize;
 
-      // Check if we're in a corner hole
-      // Holes are at the four corners where threads don't cover
-      const inLeftEdge = localX < holeRatio;
-      const inRightEdge = localX > 1 - holeRatio;
-      const inTopEdge = localY < holeRatio;
-      const inBottomEdge = localY > 1 - holeRatio;
+      // Get the stitch color at this pixel
+      const baseR = imageData[idx];
+      const baseG = imageData[idx + 1];
+      const baseB = imageData[idx + 2];
+      
+      // Apply color absorption (paint into cotton)
+      const absorbed = absorbColor(baseR, baseG, baseB);
 
-      const inCornerHole =
-        (inLeftEdge && inTopEdge) ||
-        (inLeftEdge && inBottomEdge) ||
-        (inRightEdge && inTopEdge) ||
-        (inRightEdge && inBottomEdge);
+      // Determine thread zones within the cell
+      // Threads run through the CENTER of the cell
+      // Holes appear at the edges where cells meet
+      
+      // Is this pixel in a thread zone or a hole zone?
+      const inLeftHoleZone = localX < halfHole;
+      const inRightHoleZone = localX > (1 - halfHole);
+      const inTopHoleZone = localY < halfHole;
+      const inBottomHoleZone = localY > (1 - halfHole);
+      
+      // Holes are where BOTH horizontal AND vertical hole zones overlap
+      // These are the four corners of each cell
+      const inHole = (inLeftHoleZone || inRightHoleZone) && (inTopHoleZone || inBottomHoleZone);
+      
+      // Thread zones
+      const inWarpThread = !inLeftHoleZone && !inRightHoleZone; // Vertical thread (center column)
+      const inWeftThread = !inTopHoleZone && !inBottomHoleZone; // Horizontal thread (center row)
+      const atIntersection = inWarpThread && inWeftThread; // Where threads cross
 
-      if (inCornerHole) {
-        // Dark hole - canvas showing through
-        const noise = (random() - 0.5) * 15;
-        imageData[idx] = Math.round(clamp(CANVAS_BACKGROUND.r + noise, 0, 255));
-        imageData[idx + 1] = Math.round(clamp(CANVAS_BACKGROUND.g + noise, 0, 255));
-        imageData[idx + 2] = Math.round(clamp(CANVAS_BACKGROUND.b + noise, 0, 255));
-      } else {
-        // Thread area - use the stitch color with some variation
-        const r = imageData[idx];
-        const g = imageData[idx + 1];
-        const b = imageData[idx + 2];
-
-        // Brighten threads slightly (they catch light)
-        const brightenFactor = 1.08;
-
-        // Add subtle thread texture - slight darkening at edges of thread area
-        let edgeDarken = 1.0;
-        if (inLeftEdge || inRightEdge || inTopEdge || inBottomEdge) {
-          edgeDarken = 0.92;
+      if (inHole) {
+        // Hole - show ecru background with subtle variation
+        const noise = (random() - 0.5) * 8;
+        // Add slight shadow at hole edges (depth)
+        const edgeX = inLeftHoleZone ? localX / halfHole : (1 - localX) / halfHole;
+        const edgeY = inTopHoleZone ? localY / halfHole : (1 - localY) / halfHole;
+        const edgeFactor = Math.min(edgeX, edgeY);
+        const shadowFactor = 0.85 + 0.15 * edgeFactor;
+        
+        imageData[idx] = Math.round(clamp(ECRU_BACKGROUND.r * shadowFactor + noise, 0, 255));
+        imageData[idx + 1] = Math.round(clamp(ECRU_BACKGROUND.g * shadowFactor + noise, 0, 255));
+        imageData[idx + 2] = Math.round(clamp(ECRU_BACKGROUND.b * shadowFactor + noise, 0, 255));
+      } else if (atIntersection) {
+        // Intersection - threads weave over/under
+        // Use alternating pattern based on cell position
+        const warpOnTop = (cellX + cellY) % 2 === 0;
+        
+        // The "top" thread is brighter, "bottom" thread is slightly shadowed
+        // Calculate position within the intersection zone
+        const intersectLocalX = (localX - halfHole) / threadRatio;
+        const intersectLocalY = (localY - halfHole) / threadRatio;
+        
+        // Add thread texture - subtle striations along thread direction
+        let textureFactor = 1.0;
+        if (warpOnTop) {
+          // Warp (vertical) is on top - add vertical striations
+          const striation = Math.sin(intersectLocalX * Math.PI * 3) * 0.04;
+          textureFactor = 1.0 + striation;
+          // Slight shadow at edges of the "top" thread
+          const edgeDist = Math.min(intersectLocalX, 1 - intersectLocalX);
+          textureFactor *= 0.95 + 0.05 * Math.min(edgeDist * 4, 1);
+        } else {
+          // Weft (horizontal) is on top - add horizontal striations
+          const striation = Math.sin(intersectLocalY * Math.PI * 3) * 0.04;
+          textureFactor = 1.0 + striation;
+          const edgeDist = Math.min(intersectLocalY, 1 - intersectLocalY);
+          textureFactor *= 0.95 + 0.05 * Math.min(edgeDist * 4, 1);
         }
-
-        // Add subtle variation based on thread direction (horizontal vs vertical areas)
-        const inHorizontalThread = !inTopEdge && !inBottomEdge;
-        const inVerticalThread = !inLeftEdge && !inRightEdge;
-        const threadVariation = (inHorizontalThread && inVerticalThread) ? 1.02 : 0.98;
-
-        // Small random noise for texture
-        const noise = (random() - 0.5) * 12;
-
-        const factor = brightenFactor * edgeDarken * threadVariation;
-        imageData[idx] = Math.round(clamp(r * factor + noise, 0, 255));
-        imageData[idx + 1] = Math.round(clamp(g * factor + noise, 0, 255));
-        imageData[idx + 2] = Math.round(clamp(b * factor + noise, 0, 255));
+        
+        // Thread texture noise
+        const noise = (random() - 0.5) * 10;
+        
+        imageData[idx] = Math.round(clamp(absorbed.r * textureFactor + noise, 0, 255));
+        imageData[idx + 1] = Math.round(clamp(absorbed.g * textureFactor + noise, 0, 255));
+        imageData[idx + 2] = Math.round(clamp(absorbed.b * textureFactor + noise, 0, 255));
+      } else if (inWarpThread) {
+        // Warp thread (vertical) - not at intersection
+        const threadLocalX = (localX - halfHole) / threadRatio;
+        
+        // Add vertical thread striations
+        const striation = Math.sin(threadLocalX * Math.PI * 3) * 0.03;
+        
+        // Slight darkening at thread edges
+        const edgeDist = Math.min(threadLocalX, 1 - threadLocalX);
+        const edgeFactor = 0.93 + 0.07 * Math.min(edgeDist * 3, 1);
+        
+        const textureFactor = (1.0 + striation) * edgeFactor;
+        const noise = (random() - 0.5) * 8;
+        
+        imageData[idx] = Math.round(clamp(absorbed.r * textureFactor + noise, 0, 255));
+        imageData[idx + 1] = Math.round(clamp(absorbed.g * textureFactor + noise, 0, 255));
+        imageData[idx + 2] = Math.round(clamp(absorbed.b * textureFactor + noise, 0, 255));
+      } else if (inWeftThread) {
+        // Weft thread (horizontal) - not at intersection
+        const threadLocalY = (localY - halfHole) / threadRatio;
+        
+        // Add horizontal thread striations
+        const striation = Math.sin(threadLocalY * Math.PI * 3) * 0.03;
+        
+        // Slight darkening at thread edges
+        const edgeDist = Math.min(threadLocalY, 1 - threadLocalY);
+        const edgeFactor = 0.93 + 0.07 * Math.min(edgeDist * 3, 1);
+        
+        const textureFactor = (1.0 + striation) * edgeFactor;
+        const noise = (random() - 0.5) * 8;
+        
+        imageData[idx] = Math.round(clamp(absorbed.r * textureFactor + noise, 0, 255));
+        imageData[idx + 1] = Math.round(clamp(absorbed.g * textureFactor + noise, 0, 255));
+        imageData[idx + 2] = Math.round(clamp(absorbed.b * textureFactor + noise, 0, 255));
       }
     }
   }
 }
 
 /**
- * Generates the canvas preview with colored thread mesh.
+ * Generates the canvas preview with realistic woven mesh texture.
  *
  * Pipeline:
  * 1. Nearest-neighbor upscale to preview DPI
  * 2. Extract raw pixel data
- * 3. Apply canvas mesh texture (threads as colors, dark holes at corners)
+ * 3. Apply woven mesh texture (threads with holes between them)
  * 4. Convert back to JPEG for web optimization
  *
  * @param stitchMapBuffer - PNG buffer where 1 pixel = 1 stitch

@@ -1,20 +1,15 @@
 /**
  * Stitched Preview Generation
  *
- * Generates a preview showing the "finished look" — how the
- * needlepoint will appear when fully stitched with tent stitch.
+ * Generates a preview showing finished needlepoint with realistic tent stitches.
  *
- * Visual model:
- * - Each stitch is a DIAGONAL LINE within its cell (tent stitch at 45°)
- * - The diagonal is the stitch color (slightly varied for thread texture)
- * - Areas off the diagonal are darker (shadow from adjacent stitches)
- *
- * Cell pattern (5x5 example, top-left to bottom-right diagonal):
- * B D D D D    B = bright (stitch thread)
- * D B D D D    D = darker (shadow/gap)
- * D D B D D
- * D D D B D
- * D D D D B
+ * REALITY MODEL (based on research):
+ * - Tent stitch is a DIAGONAL LINE (45°), not an oval or blob
+ * - Each stitch runs from lower-left to upper-right of its cell
+ * - Thread has visible STRANDS (2-4 plies twisted together)
+ * - Within a color area, stitches BLEND TOGETHER seamlessly
+ * - Shadows appear only at COLOR BOUNDARIES, not every stitch edge
+ * - Continuous diagonal texture flows across the surface
  */
 
 import sharp from "sharp";
@@ -40,10 +35,22 @@ function seededRandom(seed: number): () => number {
 }
 
 /**
- * Applies stitch texture with visible diagonal tent stitches.
+ * Checks if two colors are similar (within tolerance)
+ */
+function sameColor(r1: number, g1: number, b1: number, r2: number, g2: number, b2: number): boolean {
+  const tolerance = 8;
+  return Math.abs(r1 - r2) < tolerance && 
+         Math.abs(g1 - g2) < tolerance && 
+         Math.abs(b1 - b2) < tolerance;
+}
+
+/**
+ * Applies realistic tent stitch texture.
  *
- * Each stitch cell shows a clear diagonal line (the stitch) with
- * darker areas on either side (shadows/gaps between stitches).
+ * Key principles:
+ * - Continuous diagonal thread texture across surface (no cell boundaries)
+ * - Shadows ONLY at actual color boundaries
+ * - Very subtle per-pixel variation for organic feel
  *
  * @param imageData - Raw RGBA pixel buffer
  * @param width - Image width in pixels
@@ -60,68 +67,96 @@ function applyStitchTexture(
 ): void {
   const random = seededRandom(seed);
 
-  // Diagonal stitch width as a ratio of cell size
-  // Wider diagonal = more visible stitch
-  const diagonalWidthRatio = 0.35;
+  // Build a map of cell colors for boundary detection
+  const cellsX = Math.ceil(width / cellSize);
+  const cellsY = Math.ceil(height / cellSize);
+  const cellColors: Array<{ r: number; g: number; b: number }> = [];
+  
+  for (let cy = 0; cy < cellsY; cy++) {
+    for (let cx = 0; cx < cellsX; cx++) {
+      const px = Math.min(cx * cellSize + Math.floor(cellSize / 2), width - 1);
+      const py = Math.min(cy * cellSize + Math.floor(cellSize / 2), height - 1);
+      const idx = (py * width + px) * 4;
+      cellColors.push({
+        r: imageData[idx],
+        g: imageData[idx + 1],
+        b: imageData[idx + 2],
+      });
+    }
+  }
+
+  const getCellColor = (cx: number, cy: number) => {
+    if (cx < 0 || cx >= cellsX || cy < 0 || cy >= cellsY) return null;
+    return cellColors[cy * cellsX + cx];
+  };
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const idx = (y * width + x) * 4;
 
-      // Position within the cell (0 to cellSize-1)
-      const localX = x % cellSize;
-      const localY = y % cellSize;
+      const cellX = Math.floor(x / cellSize);
+      const cellY = Math.floor(y / cellSize);
+      const myColor = cellColors[cellY * cellsX + cellX];
 
-      // Normalize to 0-1 range
-      const normX = localX / (cellSize - 1 || 1);
-      const normY = localY / (cellSize - 1 || 1);
+      const baseR = imageData[idx];
+      const baseG = imageData[idx + 1];
+      const baseB = imageData[idx + 2];
 
-      // Distance from the diagonal line (top-left to bottom-right)
-      // On the diagonal: normX === normY, so distance = 0
-      // Distance is perpendicular to the diagonal
-      const diagonalDistance = Math.abs(normX - normY) / Math.sqrt(2);
+      const localX = (x % cellSize) / cellSize;
+      const localY = (y % cellSize) / cellSize;
 
-      // Determine if we're on the stitch (diagonal) or in shadow
-      const onStitch = diagonalDistance < diagonalWidthRatio;
+      // === CONTINUOUS DIAGONAL THREAD TEXTURE ===
+      // Thread strands run diagonally across the entire surface
+      // Uses GLOBAL position, not cell-local, for seamless texture
+      const globalDiag = (x - y);
+      const threadPhase = (globalDiag / cellSize * 3.5) % 1;
+      // Smooth sine wave for thread strand ridges
+      const threadTexture = 1.0 + Math.sin(threadPhase * Math.PI * 2) * 0.025;
 
-      // Get the base stitch color
-      const r = imageData[idx];
-      const g = imageData[idx + 1];
-      const b = imageData[idx + 2];
+      // === SHADOW AT COLOR BOUNDARIES ===
+      let boundaryShadow = 1.0;
+      
+      const leftColor = getCellColor(cellX - 1, cellY);
+      const rightColor = getCellColor(cellX + 1, cellY);
+      const topColor = getCellColor(cellX, cellY - 1);
+      const bottomColor = getCellColor(cellX, cellY + 1);
 
-      let newR: number, newG: number, newB: number;
-
-      if (onStitch) {
-        // On the diagonal stitch - bright thread color
-        // Vary brightness along the diagonal for thread texture
-        const threadPosition = (normX + normY) / 2;
-        
-        // Subtle highlights in the middle of the stitch
-        const highlightFactor = 1.0 + 0.12 * (1 - Math.abs(threadPosition - 0.5) * 2);
-        
-        // Small thread texture variation
-        const threadNoise = (random() - 0.5) * 15;
-        
-        // Edge darkening within the stitch (softer edges)
-        const edgeSoftness = 1.0 - (diagonalDistance / diagonalWidthRatio) * 0.15;
-
-        const factor = highlightFactor * edgeSoftness;
-        newR = r * factor + threadNoise;
-        newG = g * factor + threadNoise;
-        newB = b * factor + threadNoise;
-      } else {
-        // Off the diagonal - shadow area between stitches
-        // Darken based on distance from stitch
-        const shadowDepth = Math.min((diagonalDistance - diagonalWidthRatio) * 2, 1);
-        const shadowFactor = 0.65 - shadowDepth * 0.2;
-        
-        // Less noise in shadow areas
-        const shadowNoise = (random() - 0.5) * 8;
-
-        newR = r * shadowFactor + shadowNoise;
-        newG = g * shadowFactor + shadowNoise;
-        newB = b * shadowFactor + shadowNoise;
+      const threshold = 0.18;
+      
+      if (localX < threshold && leftColor && 
+          !sameColor(myColor.r, myColor.g, myColor.b, leftColor.r, leftColor.g, leftColor.b)) {
+        const edgeDist = localX / threshold;
+        boundaryShadow = Math.min(boundaryShadow, 0.85 + edgeDist * 0.15);
       }
+      if (localX > (1 - threshold) && rightColor && 
+          !sameColor(myColor.r, myColor.g, myColor.b, rightColor.r, rightColor.g, rightColor.b)) {
+        const edgeDist = (1 - localX) / threshold;
+        boundaryShadow = Math.min(boundaryShadow, 0.85 + edgeDist * 0.15);
+      }
+      if (localY < threshold && topColor && 
+          !sameColor(myColor.r, myColor.g, myColor.b, topColor.r, topColor.g, topColor.b)) {
+        const edgeDist = localY / threshold;
+        boundaryShadow = Math.min(boundaryShadow, 0.85 + edgeDist * 0.15);
+      }
+      if (localY > (1 - threshold) && bottomColor && 
+          !sameColor(myColor.r, myColor.g, myColor.b, bottomColor.r, bottomColor.g, bottomColor.b)) {
+        const edgeDist = (1 - localY) / threshold;
+        boundaryShadow = Math.min(boundaryShadow, 0.85 + edgeDist * 0.15);
+      }
+
+      // === VERY SUBTLE LIGHT DIRECTION ===
+      // Light from upper-left
+      const lightFactor = 1.0 + 0.01 * (1 - (x + y) / (width + height));
+
+      // === COMBINE FACTORS ===
+      const textureFactor = threadTexture * boundaryShadow * lightFactor;
+
+      // Very subtle per-pixel noise (fiber texture)
+      const noise = (random() - 0.5) * 3;
+
+      const newR = baseR * textureFactor + noise;
+      const newG = baseG * textureFactor + noise;
+      const newB = baseB * textureFactor + noise;
 
       imageData[idx] = Math.round(clamp(newR, 0, 255));
       imageData[idx + 1] = Math.round(clamp(newG, 0, 255));
@@ -131,13 +166,7 @@ function applyStitchTexture(
 }
 
 /**
- * Generates the stitched preview with visible diagonal tent stitches.
- *
- * Pipeline:
- * 1. Nearest-neighbor upscale to preview DPI
- * 2. Extract raw pixel data
- * 3. Apply stitch texture (diagonal lines with shadows)
- * 4. Convert to JPEG for web optimization
+ * Generates the stitched preview with realistic diagonal tent stitches.
  *
  * @param stitchMapBuffer - PNG buffer where 1 pixel = 1 stitch
  * @param dimensions - Physical and stitch dimensions
@@ -154,8 +183,6 @@ export async function generateStitchedPreview(
 
   const targetWidth = Math.round(dimensions.widthInches * dpi);
   const targetHeight = Math.round(dimensions.heightInches * dpi);
-
-  // Calculate cell size for stitch rendering
   const cellSize = Math.round(dpi / dimensions.meshCount);
 
   // 1. Upscale with nearest-neighbor to preserve stitch blocks
@@ -168,7 +195,7 @@ export async function generateStitchedPreview(
     .raw()
     .toBuffer();
 
-  // 2. Apply stitch texture to the raw pixel data
+  // 2. Apply stitch texture
   const seed = targetWidth * 1000 + targetHeight + 12345;
   applyStitchTexture(upscaled, targetWidth, targetHeight, cellSize, seed);
 
