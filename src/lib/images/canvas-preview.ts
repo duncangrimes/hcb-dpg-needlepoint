@@ -5,27 +5,11 @@
  * 
  * REALITY MODEL (based on research):
  * - Canvas is a WOVEN MESH with horizontal (weft) and vertical (warp) threads
+ * - Threads are CYLINDRICAL - they have rounded 3D appearance
  * - Threads weave OVER and UNDER each other at intersections
- * - Holes are the GAPS BETWEEN threads, NOT at thread intersections
- * - Base color is ECRU/CREAM (warm off-white), not black
- * - Threads are WIDER than holes (~60% thread, ~40% hole)
+ * - Holes are the GAPS BETWEEN threads at corners where 4 cells meet
+ * - Base color is ECRU/CREAM (warm off-white)
  * - Paint/color is absorbed INTO the cotton threads
- *
- * Cell structure (each stitch cell):
- * ```
- *   ┌─────────────────────┐
- *   │  H │  WARP THREAD   │ H │
- *   ├────┼────────────────┼───┤
- *   │  W │  INTERSECTION  │ W │
- *   │  E │  (over/under)  │ E │
- *   │  F │                │ F │
- *   │  T │                │ T │
- *   ├────┼────────────────┼───┤
- *   │  H │  WARP THREAD   │ H │
- *   └─────────────────────┘
- *   H = Hole (gap showing ecru background)
- *   WEFT/WARP = Colored threads
- * ```
  */
 
 import sharp from "sharp";
@@ -55,15 +39,20 @@ function seededRandom(seed: number): () => number {
  * Ecru/cream canvas background color - warm off-white
  * This shows through the holes in the mesh
  */
-const ECRU_BACKGROUND = { r: 245, g: 240, b: 225 };
+const ECRU_BACKGROUND = { r: 235, g: 228, b: 210 };
+
+/**
+ * Dark shadow color for depth in holes
+ */
+const HOLE_SHADOW = { r: 140, g: 130, b: 110 };
 
 /**
  * Desaturates and warms a color to simulate paint absorption into cotton
  */
 function absorbColor(r: number, g: number, b: number): { r: number; g: number; b: number } {
-  // Reduce saturation by ~12%
+  // Reduce saturation by ~15%
   const gray = 0.299 * r + 0.587 * g + 0.114 * b;
-  const desatFactor = 0.88;
+  const desatFactor = 0.85;
   
   const newR = gray + (r - gray) * desatFactor;
   const newG = gray + (g - gray) * desatFactor;
@@ -71,20 +60,36 @@ function absorbColor(r: number, g: number, b: number): { r: number; g: number; b
   
   // Add slight warm tint (cotton absorption)
   return {
-    r: Math.min(255, newR + 3),
+    r: Math.min(255, newR + 5),
     g: newG,
-    b: Math.max(0, newB - 2),
+    b: Math.max(0, newB - 3),
   };
 }
 
 /**
- * Applies realistic woven canvas mesh texture.
+ * Calculates cylindrical thread shading.
+ * Thread center is brightest, edges fall off like a cylinder.
+ * 
+ * @param t - Position across thread width (0 = one edge, 1 = other edge)
+ * @returns Brightness multiplier (0.55 to 1.15)
+ */
+function cylindricalShading(t: number): number {
+  // Map to -1 to 1 (center = 0)
+  const x = t * 2 - 1;
+  // Cylindrical falloff: sqrt(1 - x²) gives circular cross-section
+  const cylinderHeight = Math.sqrt(Math.max(0, 1 - x * x));
+  // Strong 3D effect: edges ~0.55, center ~1.15
+  return 0.55 + cylinderHeight * 0.60;
+}
+
+/**
+ * Applies realistic woven canvas mesh texture with cylindrical 3D threads.
  * 
  * The mesh is modeled as:
- * - Warp threads run vertically through each cell
- * - Weft threads run horizontally through each cell
+ * - Warp threads run vertically through each cell (cylindrical)
+ * - Weft threads run horizontally through each cell (cylindrical)
  * - At intersections, one thread passes OVER the other (alternating pattern)
- * - Holes are the gaps BETWEEN threads (at the four quadrant corners of each cell)
+ * - Holes are the gaps BETWEEN threads at corners
  *
  * @param imageData - Raw RGBA pixel buffer (colors already upscaled)
  * @param width - Image width in pixels
@@ -101,14 +106,10 @@ function applyCanvasMeshTexture(
 ): void {
   const random = seededRandom(seed);
   
-  // Thread takes up ~60% of cell, hole gap is ~40%
-  // But the hole is at the CORNER where 4 cells meet, so within one cell
-  // we see quarter-holes at each corner
-  const threadRatio = 0.62; // Thread coverage
-  const holeRatio = 1 - threadRatio; // Hole/gap coverage
-  
-  // Half the hole width (since hole spans two cells)
-  const halfHole = holeRatio / 2;
+  // Thread takes up ~65% of cell, hole gap is ~35%
+  const threadRatio = 0.65;
+  const holeRatio = 1 - threadRatio;
+  const halfHole = holeRatio / 2; // ~0.175
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
@@ -130,104 +131,105 @@ function applyCanvasMeshTexture(
       // Apply color absorption (paint into cotton)
       const absorbed = absorbColor(baseR, baseG, baseB);
 
-      // Determine thread zones within the cell
-      // Threads run through the CENTER of the cell
-      // Holes appear at the edges where cells meet
-      
-      // Is this pixel in a thread zone or a hole zone?
+      // Define thread zones
       const inLeftHoleZone = localX < halfHole;
       const inRightHoleZone = localX > (1 - halfHole);
       const inTopHoleZone = localY < halfHole;
       const inBottomHoleZone = localY > (1 - halfHole);
       
-      // Holes are where BOTH horizontal AND vertical hole zones overlap
-      // These are the four corners of each cell
+      // Holes are where BOTH horizontal AND vertical hole zones overlap (corners)
       const inHole = (inLeftHoleZone || inRightHoleZone) && (inTopHoleZone || inBottomHoleZone);
       
       // Thread zones
-      const inWarpThread = !inLeftHoleZone && !inRightHoleZone; // Vertical thread (center column)
-      const inWeftThread = !inTopHoleZone && !inBottomHoleZone; // Horizontal thread (center row)
-      const atIntersection = inWarpThread && inWeftThread; // Where threads cross
+      const inWarpZone = !inLeftHoleZone && !inRightHoleZone; // Vertical thread
+      const inWeftZone = !inTopHoleZone && !inBottomHoleZone; // Horizontal thread
+      const atIntersection = inWarpZone && inWeftZone;
+
+      // Cotton fiber noise (stronger for texture)
+      const noise = (random() - 0.5) * 18;
 
       if (inHole) {
-        // Hole - show ecru background with subtle variation
-        const noise = (random() - 0.5) * 8;
-        // Add slight shadow at hole edges (depth)
-        const edgeX = inLeftHoleZone ? localX / halfHole : (1 - localX) / halfHole;
-        const edgeY = inTopHoleZone ? localY / halfHole : (1 - localY) / halfHole;
-        const edgeFactor = Math.min(edgeX, edgeY);
-        const shadowFactor = 0.85 + 0.15 * edgeFactor;
+        // HOLE - show ecru background with depth shading
+        // Darker toward center of hole (deeper shadow)
+        const holeX = inLeftHoleZone ? localX / halfHole : (1 - localX) / halfHole;
+        const holeY = inTopHoleZone ? localY / halfHole : (1 - localY) / halfHole;
         
-        imageData[idx] = Math.round(clamp(ECRU_BACKGROUND.r * shadowFactor + noise, 0, 255));
-        imageData[idx + 1] = Math.round(clamp(ECRU_BACKGROUND.g * shadowFactor + noise, 0, 255));
-        imageData[idx + 2] = Math.round(clamp(ECRU_BACKGROUND.b * shadowFactor + noise, 0, 255));
+        // Distance from hole edge (0 = edge/thread, 1 = center of hole)
+        const distFromEdge = 1 - Math.max(holeX, holeY);
+        
+        // Blend from ecru at edges to shadow at center
+        const shadowBlend = 0.3 + distFromEdge * 0.5; // 30% base + up to 50% more
+        const r = ECRU_BACKGROUND.r * (1 - shadowBlend) + HOLE_SHADOW.r * shadowBlend;
+        const g = ECRU_BACKGROUND.g * (1 - shadowBlend) + HOLE_SHADOW.g * shadowBlend;
+        const b = ECRU_BACKGROUND.b * (1 - shadowBlend) + HOLE_SHADOW.b * shadowBlend;
+        
+        imageData[idx] = Math.round(clamp(r + noise * 0.5, 0, 255));
+        imageData[idx + 1] = Math.round(clamp(g + noise * 0.5, 0, 255));
+        imageData[idx + 2] = Math.round(clamp(b + noise * 0.5, 0, 255));
+        
       } else if (atIntersection) {
-        // Intersection - threads weave over/under
-        // Use alternating pattern based on cell position
+        // INTERSECTION - one thread on top of another
         const warpOnTop = (cellX + cellY) % 2 === 0;
         
-        // The "top" thread is brighter, "bottom" thread is slightly shadowed
-        // Calculate position within the intersection zone
-        const intersectLocalX = (localX - halfHole) / threadRatio;
-        const intersectLocalY = (localY - halfHole) / threadRatio;
+        // Position within the thread zones (0 to 1)
+        const threadX = (localX - halfHole) / threadRatio;
+        const threadY = (localY - halfHole) / threadRatio;
         
-        // Add thread texture - subtle striations along thread direction
-        let textureFactor = 1.0;
+        let brightness: number;
+        
         if (warpOnTop) {
-          // Warp (vertical) is on top - add vertical striations
-          const striation = Math.sin(intersectLocalX * Math.PI * 3) * 0.04;
-          textureFactor = 1.0 + striation;
-          // Slight shadow at edges of the "top" thread
-          const edgeDist = Math.min(intersectLocalX, 1 - intersectLocalX);
-          textureFactor *= 0.95 + 0.05 * Math.min(edgeDist * 4, 1);
+          // Warp (vertical) thread is on top - shade based on X position
+          brightness = cylindricalShading(threadX);
+          // Add vertical fiber texture
+          brightness *= 1.0 + Math.sin(threadX * Math.PI * 5) * 0.04;
         } else {
-          // Weft (horizontal) is on top - add horizontal striations
-          const striation = Math.sin(intersectLocalY * Math.PI * 3) * 0.04;
-          textureFactor = 1.0 + striation;
-          const edgeDist = Math.min(intersectLocalY, 1 - intersectLocalY);
-          textureFactor *= 0.95 + 0.05 * Math.min(edgeDist * 4, 1);
+          // Weft (horizontal) thread is on top - shade based on Y position
+          brightness = cylindricalShading(threadY);
+          // Add horizontal fiber texture
+          brightness *= 1.0 + Math.sin(threadY * Math.PI * 5) * 0.04;
         }
         
-        // Thread texture noise
-        const noise = (random() - 0.5) * 10;
+        // The "bottom" thread shows at the edges if it were visible, 
+        // but we simplify by just showing the top thread with full brightness
         
-        imageData[idx] = Math.round(clamp(absorbed.r * textureFactor + noise, 0, 255));
-        imageData[idx + 1] = Math.round(clamp(absorbed.g * textureFactor + noise, 0, 255));
-        imageData[idx + 2] = Math.round(clamp(absorbed.b * textureFactor + noise, 0, 255));
-      } else if (inWarpThread) {
-        // Warp thread (vertical) - not at intersection
-        const threadLocalX = (localX - halfHole) / threadRatio;
+        imageData[idx] = Math.round(clamp(absorbed.r * brightness + noise, 0, 255));
+        imageData[idx + 1] = Math.round(clamp(absorbed.g * brightness + noise, 0, 255));
+        imageData[idx + 2] = Math.round(clamp(absorbed.b * brightness + noise, 0, 255));
         
-        // Add vertical thread striations
-        const striation = Math.sin(threadLocalX * Math.PI * 3) * 0.03;
+      } else if (inWarpZone) {
+        // WARP thread (vertical) - only horizontal parts visible (top/bottom edges)
+        // These are the parts of the vertical thread that span above/below intersection
+        const threadX = (localX - halfHole) / threadRatio;
         
-        // Slight darkening at thread edges
-        const edgeDist = Math.min(threadLocalX, 1 - threadLocalX);
-        const edgeFactor = 0.93 + 0.07 * Math.min(edgeDist * 3, 1);
+        // Cylindrical shading based on X position
+        let brightness = cylindricalShading(threadX);
         
-        const textureFactor = (1.0 + striation) * edgeFactor;
-        const noise = (random() - 0.5) * 8;
+        // Add vertical fiber texture
+        brightness *= 1.0 + Math.sin(threadX * Math.PI * 5) * 0.03;
         
-        imageData[idx] = Math.round(clamp(absorbed.r * textureFactor + noise, 0, 255));
-        imageData[idx + 1] = Math.round(clamp(absorbed.g * textureFactor + noise, 0, 255));
-        imageData[idx + 2] = Math.round(clamp(absorbed.b * textureFactor + noise, 0, 255));
-      } else if (inWeftThread) {
-        // Weft thread (horizontal) - not at intersection
-        const threadLocalY = (localY - halfHole) / threadRatio;
+        // These parts are more shadowed - they're "under" adjacent weft threads
+        brightness *= 0.78;
         
-        // Add horizontal thread striations
-        const striation = Math.sin(threadLocalY * Math.PI * 3) * 0.03;
+        imageData[idx] = Math.round(clamp(absorbed.r * brightness + noise, 0, 255));
+        imageData[idx + 1] = Math.round(clamp(absorbed.g * brightness + noise, 0, 255));
+        imageData[idx + 2] = Math.round(clamp(absorbed.b * brightness + noise, 0, 255));
         
-        // Slight darkening at thread edges
-        const edgeDist = Math.min(threadLocalY, 1 - threadLocalY);
-        const edgeFactor = 0.93 + 0.07 * Math.min(edgeDist * 3, 1);
+      } else if (inWeftZone) {
+        // WEFT thread (horizontal) - only vertical parts visible (left/right edges)
+        const threadY = (localY - halfHole) / threadRatio;
         
-        const textureFactor = (1.0 + striation) * edgeFactor;
-        const noise = (random() - 0.5) * 8;
+        // Cylindrical shading based on Y position
+        let brightness = cylindricalShading(threadY);
         
-        imageData[idx] = Math.round(clamp(absorbed.r * textureFactor + noise, 0, 255));
-        imageData[idx + 1] = Math.round(clamp(absorbed.g * textureFactor + noise, 0, 255));
-        imageData[idx + 2] = Math.round(clamp(absorbed.b * textureFactor + noise, 0, 255));
+        // Add horizontal fiber texture  
+        brightness *= 1.0 + Math.sin(threadY * Math.PI * 5) * 0.03;
+        
+        // These parts are more shadowed - they're "under" adjacent warp threads
+        brightness *= 0.78;
+        
+        imageData[idx] = Math.round(clamp(absorbed.r * brightness + noise, 0, 255));
+        imageData[idx + 1] = Math.round(clamp(absorbed.g * brightness + noise, 0, 255));
+        imageData[idx + 2] = Math.round(clamp(absorbed.b * brightness + noise, 0, 255));
       }
     }
   }
