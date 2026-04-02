@@ -1,162 +1,112 @@
-# HCB Needlepoint Canvas Generator
+# Needlepoint Canvas Generator
 
-Transform your photos into custom needlepoint canvases with complete creative control.
+**Turn photos into stitchable needlepoint patterns — where 1 pixel = 1 stitch.**
 
-![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)
-![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)
-![Prisma](https://img.shields.io/badge/Prisma-ORM-2D3748?logo=prisma)
+My girlfriend Hannah is an avid needlepointer, but hand-painted canvases regularly cost $100+. I built this app to generate personalized, manufacturer-ready canvases from your own photos at a fraction of the cost.
 
----
-
-## ✨ Features
-
-### 🖌️ Lasso Selection Tool
-Draw freeform selections around exactly what you want in your canvas — pets, people, objects. No AI guessing; you're in control.
-
-### 🎨 Photo-to-Needlepoint Pipeline
-Advanced image processing converts your photos into stitchable patterns:
-- **Color quantization** using Wu's algorithm
-- **DMC thread mapping** to real embroidery floss colors
-- **Majority filtering** eliminates impractical "confetti" stitches
-- **Stitchability scoring** tells you how easy the pattern is to stitch
-
-### 📐 Canvas Composition
-Arrange multiple cutouts on your canvas:
-- Drag, scale, and rotate elements
-- Layer ordering and management
-- Background patterns (solid, gingham, stripes)
-- Configurable canvas size and mesh count
-
-### 📱 Mobile-First Design
-Optimized for the device where your photos live:
-- Touch-friendly lasso drawing
-- Camera capture integration
-- Responsive, thumb-zone-aware UI
+**What I learned:** Image processing and AI prompting alone don't produce canvases that match the beauty of hand-painted originals. The best needlepoint comes from real artists. But the engineering challenge of getting as close as possible — mapping millions of colors down to 15 DMC threads while keeping the result stitchable and recognizable — was a deeply satisfying problem.
 
 ---
 
-## 🛠️ Tech Stack
+## How It Works
 
-| Layer | Technology |
-|-------|------------|
-| Framework | Next.js 15 (App Router) |
-| Language | TypeScript |
-| State | Zustand + zundo (undo/redo) |
-| Canvas | react-konva |
-| Database | PostgreSQL + Prisma |
-| Storage | Vercel Blob |
-| Auth | Auth.js (NextAuth v5) |
-| Styling | Tailwind CSS + Headless UI |
-| Image Processing | Sharp |
+The core pipeline converts an uploaded photo into a pixel-accurate PNG pattern mapped to real DMC embroidery thread colors:
 
----
-
-## 🚀 Getting Started
-
-### Prerequisites
-
-- Node.js 20+
-- PostgreSQL database
-- Vercel Blob storage (or compatible S3)
-
-### Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/duncangrimes/hcb-dpg-needlepoint.git
-cd hcb-dpg-needlepoint
-
-# Install dependencies
-npm install
-
-# Set up environment variables
-cp .env.example .env.local
-# Edit .env.local with your database and storage credentials
-
-# Run database migrations
-npx prisma migrate dev
-
-# Start the development server
-npm run dev
+```
+Upload → Lasso Select Subject → Isolate Background (ML) → Flatten Textures
+→ Auto White Balance → Quantize Colors → Map to DMC Threads → Dither (OKLab)
+→ Dissolve Confetti Pixels → Composite onto Background → Score Stitchability
 ```
 
-Open [http://localhost:3000](http://localhost:3000) to see the app.
+### Interesting Technical Problems
+
+**Color Quantization** — Three algorithms available, each with different tradeoffs:
+- Median-cut (better edge preservation)
+- Wu's variance minimization (smoother gradients)
+- K-means in 5D OKLab+spatial space (region-aware clustering with k-means++ init)
+
+**Perceptual Color Science** — All color math happens in OKLab, a perceptually uniform color space where Euclidean distance actually correlates with how humans perceive difference. This matters for dithering (Floyd-Steinberg error diffusion in OKLab), color distinctness merging (ΔE < 0.06 threshold), and nearest-DMC-thread matching.
+
+**Confetti Cleanup** — Connected-component analysis via BFS flood-fill identifies isolated pixel clusters (< 6 pixels), then dissolves them into neighboring colors across multiple passes. Without this, patterns are impractical to stitch.
+
+**Adaptive Processing** — Sobel edge detection measures image complexity to auto-tune blur strength. High-detail images get heavier smoothing; simple subjects stay sharp.
+
+**Stitchability Scoring** — Measures average horizontal run length (consecutive same-color pixels). Longer runs = easier stitching. Scores range from "Excellent" (>7) to "Poor" (<3).
 
 ---
 
-## 📁 Project Structure
+## The Editor
+
+A mobile-first, multi-step canvas editor built on HTML5 Canvas:
+
+- **Lasso tool** — Freeform selection with path simplification (Douglas-Peucker) and smoothing (Chaikin's corner-cutting). Ray-casting point-in-polygon test with AABB fast rejection for 30-50% speedup.
+- **Arrange canvas** — Drag, scale, rotate, and layer multiple cutouts with pinch-to-zoom on mobile.
+- **Background patterns** — 7 pixel-aligned pattern generators (gingham, stripes, chevron, polka dots, etc.) where each pixel maps to exactly one stitch.
+- **Undo/redo** — Zustand + Zundo temporal state with Immer immutability, tracking only essential state slices.
+
+---
+
+## Tech Stack
+
+| | |
+|---|---|
+| **Framework** | Next.js 15, React 19, TypeScript |
+| **Canvas** | Konva / react-konva, @use-gesture/react |
+| **State** | Zustand + Immer + Zundo (undo/redo) |
+| **Image Processing** | Sharp, image-q, culori (OKLab), skmeans |
+| **ML** | @imgly/background-removal-node |
+| **Database** | PostgreSQL, Prisma |
+| **Auth** | NextAuth v5 |
+| **Storage** | Vercel Blob |
+| **Validation** | Zod |
+| **Styling** | Tailwind CSS 4, Headless UI |
+
+---
+
+## Project Structure
 
 ```
 src/
-├── app/                    # Next.js App Router
-│   ├── editor/             # Main editor page
-│   └── api/                # API routes
-├── components/
-│   └── editor/             # Editor components
-│       ├── LassoCanvas     # Lasso drawing surface
-│       ├── ArrangeCanvas   # Composition canvas
-│       └── PreviewStep     # Result display
-├── stores/
-│   └── editor-store.ts     # Zustand state management
 ├── lib/
-│   ├── colors/             # Color processing pipeline
-│   └── editor/             # Geometry & extraction
+│   ├── colors/          # Quantization, dithering, correction, DMC mapping
+│   ├── editor/          # Geometry (ray-casting, Douglas-Peucker, Chaikin's)
+│   ├── isolation/       # ML background removal
+│   ├── simplification/  # Confetti cleanup, texture flattening
+│   ├── compositor/      # Final image assembly
+│   └── background/      # Pattern generators
+├── components/editor/   # Lasso, arrange, preview, settings UI
+├── stores/              # Zustand store with temporal undo
+├── app/                 # Next.js App Router, API routes
 └── data/
-    └── dmc-threads.json    # DMC thread color database
+    └── dmc-threads.json # 489 DMC thread colors
 ```
 
 ---
 
-## 🖼️ Image Processing Pipeline
+## Algorithms Used
 
-The pipeline transforms photos into manufacturer-ready needlepoint patterns where **1 pixel = 1 stitch**:
-
-1. **Resize** to target stitch dimensions (based on canvas size × mesh count)
-2. **Color correct** with auto white balance
-3. **Quantize** to limited color palette (Wu's algorithm)
-4. **Map** colors to DMC thread codes
-5. **Dither** in perceptual color space (OKLab)
-6. **Filter** with majority filter to remove confetti pixels
-7. **Score** stitchability based on horizontal run lengths
-
-### Output
-
-- **Manufacturer Image** — pixel-accurate PNG (1 pixel = 1 stitch)
-- **Thread List** — DMC codes with stitch counts
-- **Stitchability Score** — how practical the pattern is to stitch
+| Algorithm | Purpose |
+|---|---|
+| K-Means++ (5D OKLab + spatial) | Region-aware color clustering |
+| Median-Cut / Wu's Quantization | Color palette reduction |
+| Floyd-Steinberg Dithering | Perceptual error diffusion in OKLab |
+| Douglas-Peucker | Lasso path simplification |
+| Chaikin's Corner-Cutting | Path smoothing |
+| Ray Casting | Point-in-polygon for masking |
+| Shoelace Formula | Polygon area calculation |
+| BFS Flood-Fill | Connected-component labeling |
+| Sobel Operator | Edge density detection |
+| Gray World Assumption | Auto white balance |
 
 ---
 
-## 📚 Documentation
+## Running Locally
 
-Detailed documentation is available in the [`docs/`](./docs/) folder:
+```bash
+npm install
+cp .env.example .env.local   # Add database + storage credentials
+npx prisma migrate dev
+npm run dev
+```
 
-- **[MVP Specification](./docs/MVP.md)** — Current features and roadmap
-- **[Technical Spec](./docs/TECHNICAL-SPECIFICATION.md)** — Architecture and data models
-- **[Performance Analysis](./docs/PERFORMANCE-ANALYSIS.md)** — Optimization recommendations
-- **[Color Palette](./docs/COLOR-PALETTE.md)** — Brand design system
-
----
-
-## 🎨 Color Palette
-
-| Color | Hex | Usage |
-|-------|-----|-------|
-| Terracotta | `#E86142` | Primary brand, CTAs |
-| Sage | `#7A8A5E` | Secondary, accents |
-| Golden Thread | `#FBBF24` | Highlights, badges |
-| Stone | `#7A756C` | Text, neutrals |
-
-See [COLOR-PALETTE.md](./docs/COLOR-PALETTE.md) for the full palette.
-
----
-
-## 📝 License
-
-Private project for HCB Needlepoint.
-
----
-
-## 🤝 Contributing
-
-This is a private project. Contact the maintainers for contribution guidelines.
+Requires Node 20+, PostgreSQL, and Vercel Blob (or compatible S3).
